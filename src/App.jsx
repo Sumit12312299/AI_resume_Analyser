@@ -26,13 +26,19 @@ import {
   Fingerprint,
   Activity,
   Compass,
-  FileDown
+  FileDown,
+  Settings,
+  Brain,
+  Eye,
+  EyeOff,
+  Info,
+  ExternalLink
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import html2pdf from 'html2pdf.js';
 
 // Internal Utils
-import { analyzeResume } from './utils/analysis';
+import { analyzeResume, analyzeResumeWithGemini } from './utils/analysis';
 
 // PDF.js configuration
 import * as pdfjs from 'pdfjs-dist';
@@ -86,6 +92,96 @@ const MeshBackground = () => (
   </div>
 );
 
+const SettingsModal = ({ isOpen, onClose, apiKey, setApiKey, selectedModel, setSelectedModel }) => {
+  const [showKey, setShowKey] = useState(false);
+  const [tempKey, setTempKey] = useState(apiKey);
+  const [tempModel, setTempModel] = useState(selectedModel);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTempKey(apiKey);
+      setTempModel(selectedModel);
+    }
+  }, [isOpen, apiKey, selectedModel]);
+
+  const handleSave = () => {
+    setApiKey(tempKey);
+    setSelectedModel(tempModel);
+    localStorage.setItem('gemini_api_key', tempKey);
+    localStorage.setItem('gemini_model', tempModel);
+    onClose();
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="modal-overlay" onClick={onClose}>
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 20 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+            className="modal-card" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Brain size={24} color="var(--accent-primary)" />
+                <h3 style={{ fontSize: '1.25rem', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>ENGINE_CONFIGURATION</h3>
+              </div>
+              <button className="modal-close" onClick={onClose}><X size={20} /></button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2.5rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>GEMINI_API_KEY</label>
+                <div style={{ position: 'relative' }}>
+                  <input 
+                    type={showKey ? 'text' : 'password'}
+                    placeholder="Enter your Gemini API key..."
+                    value={tempKey}
+                    onChange={(e) => setTempKey(e.target.value)}
+                    className="settings-input"
+                    style={{ paddingRight: '3rem' }}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowKey(!showKey)}
+                    style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+                  >
+                    {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                  <Info size={12} /> Get a free API key from <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-secondary)', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>Google AI Studio <ExternalLink size={10} /></a>.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>SELECTED_MODEL</label>
+                <select 
+                  value={tempModel} 
+                  onChange={(e) => setTempModel(e.target.value)}
+                  className="settings-input"
+                >
+                  <option value="gemini-2.5-flash">gemini-2.5-flash (Fast & Optimized)</option>
+                  <option value="gemini-2.5-pro">gemini-2.5-pro (Deep & Analytical)</option>
+                  <option value="gemini-1.5-flash">gemini-1.5-flash (Legacy)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+              <button className="btn-secondary" onClick={onClose}>CANCEL</button>
+              <button className="btn-primary-small" onClick={handleSave}>SAVE_CHANGES</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+};
+
 function App() {
   const [resume, setResume] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -95,6 +191,13 @@ function App() {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'dark');
   const [isDownloading, setIsDownloading] = useState(false);
+  
+  // Gemini API & Settings States
+  const [apiKey, setApiKey] = useState(localStorage.getItem('gemini_api_key') || '');
+  const [selectedModel, setSelectedModel] = useState(localStorage.getItem('gemini_model') || 'gemini-2.5-flash');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [apiError, setApiError] = useState(null);
+  const [isCopied, setIsCopied] = useState(false);
   
   const fileInputRef = useRef(null);
   const resumePrintRef = useRef(null);
@@ -124,16 +227,36 @@ function App() {
     }
   };
 
-  const handleRunAnalysis = () => {
+  const handleRunAnalysis = async () => {
     if (!resume || !jobDescription) return;
     setIsAnalyzing(true);
+    setApiError(null);
     
-    // Simulate thinking time for "accuracy" feel
-    setTimeout(() => {
-      const liveResults = analyzeResume(resume, jobDescription);
-      setResults(liveResults);
-      setIsAnalyzing(false);
-    }, 2500);
+    if (apiKey) {
+      try {
+        const geminiResults = await analyzeResumeWithGemini(resume, jobDescription, apiKey, selectedModel);
+        setResults(geminiResults);
+      } catch (error) {
+        console.error(error);
+        setApiError(error.message || 'Failed to connect to Gemini API. Please check your API key.');
+      } finally {
+        setIsAnalyzing(false);
+      }
+    } else {
+      // Fallback: Heuristic Analysis Engine
+      setTimeout(() => {
+        const liveResults = analyzeResume(resume, jobDescription);
+        setResults(liveResults);
+        setIsAnalyzing(false);
+      }, 2500);
+    }
+  };
+
+  const copyToClipboard = () => {
+    if (!results || !results.finalResume) return;
+    navigator.clipboard.writeText(results.finalResume);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
   };
 
   const downloadResumePdf = () => {
@@ -158,11 +281,25 @@ function App() {
     <div style={{ minHeight: '100vh' }}>
       <MeshBackground />
       
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+        apiKey={apiKey} 
+        setApiKey={setApiKey} 
+        selectedModel={selectedModel} 
+        setSelectedModel={setSelectedModel} 
+      />
+
       <div className="container">
         {/* HUD Elements */}
-        <button className="theme-toggle" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-          {theme === 'dark' ? <Sun size={24} /> : <Moon size={24} />}
-        </button>
+        <div className="hud-tray">
+          <button className="hud-button" onClick={() => setIsSettingsOpen(true)} title="Configure API Settings">
+            <Settings size={22} />
+          </button>
+          <button className="hud-button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title="Toggle Light/Dark Theme">
+            {theme === 'dark' ? <Sun size={22} /> : <Moon size={22} />}
+          </button>
+        </div>
 
         <header style={{ marginBottom: '8rem' }}>
           <motion.div
@@ -179,7 +316,7 @@ function App() {
               <span style={{ color: 'var(--text-primary)' }}>Career Architect</span>
             </h1>
             <p style={{ fontSize: '1.4rem', color: 'var(--text-secondary)', maxWidth: '600px', marginTop: '2rem' }}>
-              Advanced heuristic scanning to bridge the gap between your talent and industry requirements.
+              {apiKey ? 'Deep neural semantic analysis to align your resume with high-impact job parameters.' : 'Advanced heuristic scanning to bridge the gap between your talent and industry requirements.'}
             </p>
           </motion.div>
         </header>
@@ -199,6 +336,12 @@ function App() {
                     <Fingerprint size={32} color="var(--accent-primary)" />
                     <h2 style={{ fontSize: '1.5rem', fontFamily: 'var(--font-mono)' }}>DATA_SOURCE_IDENTIFICATION</h2>
                   </div>
+                  {apiError && (
+                    <div className="api-error-banner">
+                      <AlertCircle size={18} />
+                      <span>{apiError}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -253,7 +396,7 @@ function App() {
                    </SpotlightCard>
                 </div>
 
-                <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'center', marginTop: '2rem' }}>
+                <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '2rem' }}>
                   <motion.button 
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
@@ -263,6 +406,13 @@ function App() {
                   >
                     CALCULATE_MATCH_VECTORS <Sparkles size={20} />
                   </motion.button>
+
+                  {!apiKey && (
+                    <div className="pro-tip-banner">
+                      <Sparkles size={16} color="var(--accent-primary)" />
+                      <span>💡 <strong>Config Tip:</strong> Provide a Gemini API Key in the settings panel (bottom-right) to activate LLM-powered deep resume rewriting and analytical intelligence.</span>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -299,8 +449,10 @@ function App() {
                     <ArrowLeft size={16} /> RESET_SYSTEM
                   </button>
                   <div style={{ display: 'flex', gap: '1rem' }}>
-                     <div className="badge badge-success">ACCURACY_MODE:DYNAMIC</div>
-                     <div className="badge" style={{ color: 'var(--accent-primary)' }}>LATENCY: 42MS</div>
+                     <div className="badge badge-success">
+                       {apiKey ? `ACCURACY_MODE: DEEP_AI (${selectedModel.toUpperCase()})` : 'ACCURACY_MODE: LOCAL_HEURISTIC'}
+                     </div>
+                     <div className="badge" style={{ color: 'var(--accent-primary)' }}>{apiKey ? 'API_DRIVEN: GEMINI' : 'LATENCY: 42MS'}</div>
                   </div>
                 </motion.div>
 
@@ -308,14 +460,14 @@ function App() {
                    <SpotlightCard style={{ padding: '3rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                       <div style={{ position: 'relative', width: '240px', height: '240px' }}>
                         <svg width="240" height="240" viewBox="0 0 100 100">
-                          <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="4" />
-                          <motion.circle cx="50" cy="50" r="45" fill="none" stroke="url(#scoreGrad)" strokeWidth="6" strokeDasharray="283" strokeDashoffset={283 - (283 * results.score) / 100} strokeLinecap="round" transform="rotate(-90 50 50)" />
-                          <defs>
+                           <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="4" />
+                           <motion.circle cx="50" cy="50" r="45" fill="none" stroke="url(#scoreGrad)" strokeWidth="6" strokeDasharray="283" strokeDashoffset={283 - (283 * results.score) / 100} strokeLinecap="round" transform="rotate(-90 50 50)" />
+                           <defs>
                             <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                               <stop offset="0%" stopColor="#6366f1" />
                               <stop offset="100%" stopColor="#f43f5e" />
                             </linearGradient>
-                          </defs>
+                           </defs>
                         </svg>
                         <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
                           <span style={{ fontSize: '4.5rem', fontWeight: 800 }}>{results.score}</span>
@@ -376,19 +528,26 @@ function App() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4rem', flexWrap: 'wrap', gap: '2rem' }}>
                       <div>
                         <h3 style={{ fontSize: '2rem' }}>GENERATED_OPTIMIZED_SOURCE</h3>
-                        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>Heuristic-driven rewrite tailored for modern ATS architectures.</p>
+                        <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+                          {apiKey ? 'LLM-generated semantic rewrite tailored for modern ATS architectures.' : 'Heuristic-driven rewrite tailored for modern ATS architectures.'}
+                        </p>
                       </div>
                       <div style={{ display: 'flex', gap: '1.5rem' }}>
-                         <motion.button whileTap={{ scale: 0.95 }} className="btn-primary" style={{ padding: '0.8rem 1.8rem', fontSize: '0.9rem', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', border: '1px solid var(--glass-border)' }}>
-                           <Copy size={18} /> COPY_BUFF
+                         <motion.button 
+                           whileTap={{ scale: 0.95 }} 
+                           onClick={copyToClipboard}
+                           className="btn-primary" 
+                           style={{ padding: '0.8rem 1.8rem', fontSize: '0.9rem', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', border: '1px solid var(--glass-border)' }}
+                         >
+                           <Copy size={18} /> {isCopied ? 'COPIED!' : 'COPY_BUFF'}
                          </motion.button>
                          <motion.button 
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={downloadResumePdf}
-                          disabled={isDownloading}
-                          className="btn-primary" 
-                          style={{ padding: '0.8rem 1.8rem', fontSize: '0.9rem', minWidth: '180px' }}
+                           whileHover={{ scale: 1.05 }}
+                           whileTap={{ scale: 0.95 }}
+                           onClick={downloadResumePdf}
+                           disabled={isDownloading}
+                           className="btn-primary" 
+                           style={{ padding: '0.8rem 1.8rem', fontSize: '0.9rem', minWidth: '180px' }}
                          >
                            {isDownloading ? (
                              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }}><Cpu size={18} /></motion.div>

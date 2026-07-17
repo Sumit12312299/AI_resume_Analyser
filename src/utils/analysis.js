@@ -94,3 +94,70 @@ ${originalText.substring(0, 1500)}${originalText.length > 1500 ? '...' : ''}
 *Document optimized for ATS parsing systems.*
   `;
 };
+
+export const analyzeResumeWithGemini = async (resumeText, jdText, apiKey, modelName = 'gemini-2.5-flash') => {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  
+  const prompt = `You are an expert Applicant Tracking System (ATS) optimization engine and resume strategist.
+Your task is to analyze the resume text against the provided job description (JD) to compute compatibility and generate a highly optimized resume rewrite.
+
+### Resume:
+${resumeText}
+
+### Job Description:
+${jdText}
+
+### Expected JSON Output Schema:
+Provide your response strictly in the following JSON format:
+{
+  "score": (integer, 0 to 100 representing how well the resume aligns with the JD),
+  "percentile": (integer, 0 to 100 representing how this candidate ranks compared to typical applicants for this role),
+  "matches": (integer, count of skills/technologies matching between resume and JD),
+  "gaps": (integer, count of skills/technologies requested in JD but missing in resume),
+  "matchingSkills": [array of strings, matching skills/keywords],
+  "missingSkills": [array of strings, critical missing skills/keywords],
+  "suggestions": [array of strings, actionable recommendations to improve the resume],
+  "improvedSummary": "A concise, professional, ATS-optimized summary (3-4 sentences) highlighting matches and strategically addressing gaps",
+  "finalResume": "Full optimized resume in professional Markdown format. Rewrite the resume, maintaining all original details but enhancing wording, structure, and readability, integrating relevant skills naturally."
+}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'object',
+          properties: {
+            score: { type: 'integer' },
+            percentile: { type: 'integer' },
+            matches: { type: 'integer' },
+            gaps: { type: 'integer' },
+            matchingSkills: { type: 'array', items: { type: 'string' } },
+            missingSkills: { type: 'array', items: { type: 'string' } },
+            suggestions: { type: 'array', items: { type: 'string' } },
+            improvedSummary: { type: 'string' },
+            finalResume: { type: 'string' }
+          },
+          required: ['score', 'percentile', 'matches', 'gaps', 'matchingSkills', 'missingSkills', 'suggestions', 'improvedSummary', 'finalResume']
+        }
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Gemini API Error: ${response.status} - ${errText}`);
+  }
+
+  const data = await response.json();
+  const textResponse = data.candidates[0].content.parts[0].text;
+  return JSON.parse(textResponse);
+};
+
