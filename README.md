@@ -1,16 +1,75 @@
-# React + Vite
+# 🚀 Enterprise AI Career Suite (AI Resume Analyzer)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A state-of-the-art, high-tech, responsive web application designed to empower job seekers by analyzing resumes against Job Descriptions (JD) in real-time. Features an interactive dual-mode editor, ATS compliance checker, design template customizer, keyword frequency analyzer, and an AI-driven Interview Copilot.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## ✨ Key Features & Capabilties
 
-## React Compiler
+### 📊 ATS Compliance Audit & Score Dial
+- **Live Vector Match Rate:** Get immediate, detailed scoring on how well your resume matches the target job spec.
+- **Biometric Ring Dial:** Features a glowing, rotating, and pulsing circle dial showcasing your ATS score.
+- **Actionable Insights:** Recieve line-by-line recommendations for layout fixes, styling improvements, and core credential alignments.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 📋 Dual-Mode Workspace Editor
+- **Visual Form Wizard:** Edit your resume details (experiences list, educational history, credentials, skills list) in an intuitive form-based interface.
+- **Markdown Editor:** Toggle to a raw Markdown text-area for fast copy-pasting, custom formatting, and deep edits.
+- **Bi-directional Sync:** Form Wizard state and Markdown code automatically compile and parse into one another in real-time.
 
-## Expanding the ESLint configuration
+### 💼 Multi-Layout Printable Templates
+- **Classic Executive:** Elegant, professional centered layouts.
+- **Modern Two-Column:** High-impact sidebar structure splitting profile details and experiences.
+- **Creative Minimalist:** Accent-colored minimalist aesthetic for designers and modern job roles.
+- **Design Controls:** Control Accent Colors, Fonts (Outfit, Georgia, Mono), Font sizes, margin spacings, and line heights.
+- **One-click Export:** High-quality PDF export target using `html2pdf.js`.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### 🧠 AI Interview Preparation Copilot
+- **Behavioral Questions:** Generates situational questions based on the gaps identified between your resume and Job Description.
+- **Rationale & Tips:** Includes an explanation of why the question is asked and tips using the **STAR Method** (Situation, Task, Action, Result).
+
+---
+
+## 🛠️ Tech Stack & Key Libraries
+
+- **Frontend Core:** [React](https://react.dev/) + [Vite](https://vite.dev/)
+- **Styling:** Custom Glassmorphism CSS with high-tech vibrant dark-mode color themes.
+- **Animations:** [Framer Motion](https://www.framer.com/motion/) (3D Card Tilt, Hologram rings, Terminal Log updates).
+- **Icons:** [Lucide React](https://lucide.dev/)
+- **Markdown Processing:** [React Markdown](https://github.com/remarkjs/react-markdown)
+- **PDF Parser:** [PDF.js](https://mozilla.github.io/pdf.js/) (extract text directly from uploaded PDF resumes).
+- **PDF Export:** [html2pdf.js](https://github.com/eKoopmans/html2pdf.js/)
+
+---
+
+## 🔧 Installation & Setup
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Sumit12312299/AI_resume_Analyser.git
+   cd AI_resume_Analyser
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+3. **Start the local development server:**
+   ```bash
+   npm run dev
+   ```
+
+4. **Build for production:**
+   ```bash
+   npm run build
+   ```
+
+---
+
+## 💡 Gemini API Configuration
+
+To enable LLM-powered deep resume re-writing, keyword matching, and situational interview question generation:
+1. Click the **Settings Gear Icon** in the bottom-right corner of the application.
+2. Provide your **Gemini API Key** (obtainable for free from [Google AI Studio](https://aistudio.google.com/)).
+3. Select your preferred model (e.g., `gemini-2.5-flash` or `gemini-2.5-pro`).
+4. Click **Save Changes**. The configuration is saved locally inside `localStorage` for privacy and ease of use.
