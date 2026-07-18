@@ -40,7 +40,9 @@ import {
   Palette,
   Layout,
   ListChecks,
-  Wand2
+  Wand2,
+  Plus,
+  Trash2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import html2pdf from 'html2pdf.js';
@@ -50,7 +52,9 @@ import {
   analyzeResume, 
   analyzeResumeWithGemini,
   checkAtsCompliance,
-  revampBulletPoint
+  revampBulletPoint,
+  getKeywordDensity,
+  getInterviewPrepQuestions
 } from './utils/analysis';
 
 // PDF.js configuration
@@ -222,6 +226,162 @@ const categorizeSkills = (matching = [], missing = []) => {
   return result;
 };
 
+const compileDataToMarkdown = (data) => {
+  let md = `# ${data.name || 'Your Name'}\n`;
+  if (data.title) md += `**${data.title}**\n\n`;
+  
+  const contacts = [];
+  if (data.email) contacts.push(data.email);
+  if (data.phone) contacts.push(data.phone);
+  if (data.linkedin) contacts.push(data.linkedin);
+  if (data.location) contacts.push(data.location);
+  
+  if (contacts.length > 0) {
+    md += `${contacts.join('  |  ')}\n\n`;
+  }
+  
+  if (data.summary) {
+    md += `## Professional Summary\n${data.summary}\n\n`;
+  }
+  
+  if (data.experiences && data.experiences.length > 0) {
+    md += `## Professional Experience\n\n`;
+    data.experiences.forEach(exp => {
+      md += `### ${exp.role} at ${exp.company} (${exp.duration})\n`;
+      const bullets = exp.bulletPoints.split('\n').filter(b => b.trim());
+      bullets.forEach(b => {
+        if (b.startsWith('-') || b.startsWith('*')) {
+          md += `${b}\n`;
+        } else {
+          md += `- ${b}\n`;
+        }
+      });
+      md += `\n`;
+    });
+  }
+  
+  if (data.education && data.education.length > 0) {
+    md += `## Education\n\n`;
+    data.education.forEach(edu => {
+      md += `### ${edu.degree}\n*${edu.school} (${edu.year})*\n\n`;
+    });
+  }
+  
+  if (data.skills) {
+    md += `## Skills\n${data.skills}\n`;
+  }
+  
+  return md;
+};
+
+const parseMarkdownToData = (md) => {
+  const data = {
+    name: 'Sumit Kumar',
+    title: 'Software Developer',
+    email: '',
+    phone: '',
+    linkedin: '',
+    location: '',
+    summary: '',
+    experiences: [],
+    education: [],
+    skills: ''
+  };
+  
+  if (!md) return data;
+  
+  const lines = md.split('\n');
+  let currentSection = '';
+  let currentExp = null;
+  let headerSet = false;
+  
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    
+    if (i === 0 && trimmed.startsWith('# ')) {
+      data.name = trimmed.replace('#', '').trim();
+      headerSet = true;
+      return;
+    }
+    
+    if (i === 1 && trimmed.startsWith('**') && trimmed.endsWith('**') && !data.title) {
+      data.title = trimmed.replace(/\*\*/g, '').trim();
+      return;
+    }
+    
+    if (trimmed.includes('@') || trimmed.includes('|') || trimmed.includes('linkedin.com')) {
+      const parts = trimmed.split('|').map(p => p.trim());
+      parts.forEach(p => {
+        if (p.includes('@')) data.email = p;
+        else if (p.includes('linkedin.com')) data.linkedin = p;
+        else if (/[0-9]/.test(p) && p.length > 7) data.phone = p;
+        else if (p) data.location = p;
+      });
+      return;
+    }
+    
+    if (trimmed.startsWith('## ')) {
+      const sec = trimmed.replace('##', '').trim().toLowerCase();
+      if (sec.includes('summary') || sec.includes('profile')) {
+        currentSection = 'summary';
+      } else if (sec.includes('experience') || sec.includes('history')) {
+        currentSection = 'experience';
+      } else if (sec.includes('education')) {
+        currentSection = 'education';
+      } else if (sec.includes('skills')) {
+        currentSection = 'skills';
+      } else {
+        currentSection = '';
+      }
+      return;
+    }
+    
+    if (currentSection === 'summary') {
+      data.summary += (data.summary ? '\n' : '') + trimmed;
+    } else if (currentSection === 'skills') {
+      data.skills += (data.skills ? ', ' : '') + trimmed;
+    } else if (currentSection === 'experience') {
+      if (trimmed.startsWith('### ')) {
+        if (currentExp) data.experiences.push(currentExp);
+        
+        const header = trimmed.replace('###', '').trim();
+        const parts = header.split(' at ');
+        const role = parts[0] || 'Software Engineer';
+        let company = 'Company';
+        let duration = 'Present';
+        if (parts[1]) {
+          const compParts = parts[1].split('(');
+          company = compParts[0].trim();
+          if (compParts[1]) {
+            duration = compParts[1].replace(')', '').trim();
+          }
+        }
+        currentExp = { role, company, duration, bulletPoints: '' };
+      } else if (currentExp && (trimmed.startsWith('-') || trimmed.startsWith('*'))) {
+        const bullet = trimmed.replace(/^[-*]\s*/, '');
+        currentExp.bulletPoints += (currentExp.bulletPoints ? '\n' : '') + bullet;
+      }
+    } else if (currentSection === 'education') {
+      if (trimmed.startsWith('### ')) {
+        const degree = trimmed.replace('###', '').trim();
+        data.education.push({ degree, school: 'University', year: '' });
+      } else if (data.education.length > 0 && (trimmed.startsWith('*') || trimmed.startsWith('_'))) {
+        const schoolText = trimmed.replace(/[*_]/g, '').trim();
+        const parts = schoolText.split('(');
+        const school = parts[0] ? parts[0].trim() : 'University';
+        const year = parts[1] ? parts[1].replace(')', '').trim() : '';
+        data.education[data.education.length - 1].school = school;
+        data.education[data.education.length - 1].year = year;
+      }
+    }
+  });
+  
+  if (currentExp) data.experiences.push(currentExp);
+  
+  return data;
+};
+
 function App() {
   const [resume, setResume] = useState('');
   const [jobDescription, setJobDescription] = useState('');
@@ -255,6 +415,24 @@ function App() {
   const [templateLineHeight, setTemplateLineHeight] = useState('1.5');
   const [templateMargin, setTemplateMargin] = useState('balanced'); // 'narrow', 'balanced', 'wide'
   
+  // --- ADDITIONAL NEXT-LEVEL STATES ---
+  const [templateLayout, setTemplateLayout] = useState('classic'); // 'classic', 'modern', 'creative'
+  const [isFormWizard, setIsFormWizard] = useState(false);
+  const [interviewQuestions, setInterviewQuestions] = useState([]);
+  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const [resumeData, setResumeData] = useState({
+    name: '',
+    title: '',
+    email: '',
+    phone: '',
+    linkedin: '',
+    location: '',
+    summary: '',
+    experiences: [],
+    education: [],
+    skills: ''
+  });
+  
   const fileInputRef = useRef(null);
   const resumePrintRef = useRef(null);
 
@@ -262,6 +440,14 @@ function App() {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
   }, [theme]);
+
+  // Compile Wizard data to Markdown on changes
+  useEffect(() => {
+    if (isFormWizard && results) {
+      const compiled = compileDataToMarkdown(resumeData);
+      setEditedResume(compiled);
+    }
+  }, [resumeData, isFormWizard]);
 
   const extractTextFromPdf = async (file) => {
     setIsParsing(true);
@@ -283,6 +469,18 @@ function App() {
     }
   };
 
+  const handleFetchInterviewQuestions = async (resumeText, jdText) => {
+    setIsGeneratingQuestions(true);
+    try {
+      const questions = await getInterviewPrepQuestions(resumeText, jdText, apiKey, selectedModel);
+      setInterviewQuestions(questions);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsGeneratingQuestions(false);
+    }
+  };
+
   const handleRunAnalysis = async () => {
     if (!resume || !jobDescription) return;
     setIsAnalyzing(true);
@@ -293,11 +491,19 @@ function App() {
         const geminiResults = await analyzeResumeWithGemini(resume, jobDescription, apiKey, selectedModel);
         setResults(geminiResults);
         setEditedResume(geminiResults.finalResume);
+        
+        // Populate Wizard data
+        const parsedData = parseMarkdownToData(geminiResults.finalResume);
+        setResumeData(parsedData);
+        
         setActiveTab('analytics');
+        setIsAnalyzing(false);
+
+        // Fetch interview questions
+        handleFetchInterviewQuestions(geminiResults.finalResume, jobDescription);
       } catch (error) {
         console.error(error);
         setApiError(error.message || 'Failed to connect to Gemini API. Please check your API key.');
-      } finally {
         setIsAnalyzing(false);
       }
     } else {
@@ -306,8 +512,16 @@ function App() {
         const liveResults = analyzeResume(resume, jobDescription);
         setResults(liveResults);
         setEditedResume(liveResults.finalResume);
+        
+        // Populate Wizard data
+        const parsedData = parseMarkdownToData(liveResults.finalResume);
+        setResumeData(parsedData);
+        
         setActiveTab('analytics');
         setIsAnalyzing(false);
+
+        // Fetch interview questions
+        handleFetchInterviewQuestions(liveResults.finalResume, jobDescription);
       }, 2500);
     }
   };
@@ -333,6 +547,50 @@ function App() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
+  const addExperience = () => {
+    setResumeData(prev => ({
+      ...prev,
+      experiences: [...prev.experiences, { role: '', company: '', duration: '', bulletPoints: '' }]
+    }));
+  };
+
+  const updateExperience = (index, field, value) => {
+    setResumeData(prev => {
+      const copy = [...prev.experiences];
+      copy[index] = { ...copy[index], [field]: value };
+      return { ...prev, experiences: copy };
+    });
+  };
+
+  const removeExperience = (index) => {
+    setResumeData(prev => ({
+      ...prev,
+      experiences: prev.experiences.filter((_, idx) => idx !== index)
+    }));
+  };
+
+  const addEducation = () => {
+    setResumeData(prev => ({
+      ...prev,
+      education: [...prev.education, { degree: '', school: '', year: '' }]
+    }));
+  };
+
+  const updateEducation = (index, field, value) => {
+    setResumeData(prev => {
+      const copy = [...prev.education];
+      copy[index] = { ...copy[index], [field]: value };
+      return { ...prev, education: copy };
+    });
+  };
+
+  const removeEducation = (index) => {
+    setResumeData(prev => ({
+      ...prev,
+      education: prev.education.filter((_, idx) => idx !== index)
+    }));
+  };
+
   const downloadResumePdf = () => {
     if (!resumePrintRef.current) return;
     setIsDownloading(true);
@@ -349,6 +607,271 @@ function App() {
     html2pdf().set(opt).from(element).save().then(() => {
       setIsDownloading(false);
     });
+  };
+
+  const renderResumeSheet = () => {
+    // Styles based on settings
+    const fontFam = templateFont === 'serif' ? 'Georgia, serif' : templateFont === 'mono' ? 'Courier New, monospace' : 'inherit';
+    const padding = templateMargin === 'narrow' ? '2.5rem' : templateMargin === 'wide' ? '5.5rem' : '4rem';
+    const fontSize = templateFontSize === 'compact' ? '0.85rem' : templateFontSize === 'large' ? '1.05rem' : '0.95rem';
+
+    const containerStyle = {
+      background: '#ffffff',
+      color: '#111827',
+      padding: padding,
+      borderRadius: '16px',
+      boxShadow: '0 25px 60px rgba(0,0,0,0.3)',
+      fontSize: fontSize,
+      lineHeight: templateLineHeight,
+      fontFamily: fontFam,
+      borderTop: `8px solid ${templateAccent}`,
+      maxWidth: '820px',
+      margin: '0 auto',
+      textAlign: 'left',
+      transition: 'all 0.3s ease'
+    };
+
+    const hrStyle = {
+      border: 'none',
+      borderBottom: `2.5px solid ${templateAccent}22`,
+      margin: '1.25rem 0'
+    };
+
+    const renderBullets = (bulletsText) => {
+      if (!bulletsText) return null;
+      return (
+        <ul style={{ paddingLeft: '1.35rem', margin: '0.5rem 0' }}>
+          {bulletsText.split('\n').filter(b => b.trim()).map((bullet, idx) => (
+            <li key={idx} style={{ marginBottom: '0.45rem', color: '#374151', fontSize: 'inherit', lineHeight: 'inherit' }}>
+              {bullet.replace(/^[-*]\s*/, '')}
+            </li>
+          ))}
+        </ul>
+      );
+    };
+
+    if (templateLayout === 'modern') {
+      return (
+        <div style={{ ...containerStyle, padding: 0, borderTop: 'none', display: 'grid', gridTemplateColumns: '250px 1fr', overflow: 'hidden' }}>
+          {/* Sidebar */}
+          <div style={{ background: '#f8fafc', padding: '2.5rem 2rem', borderRight: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            <div>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b', marginBottom: '0.25rem', borderBottom: 'none' }}>{resumeData.name || 'Your Name'}</h2>
+              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: templateAccent, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{resumeData.title || 'Profession'}</p>
+            </div>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', fontSize: '0.8rem', color: '#475569' }}>
+              <span style={{ fontWeight: 600, borderBottom: `1.5px solid ${templateAccent}44`, paddingBottom: '0.2rem', color: templateAccent, fontSize: '0.75rem', letterSpacing: '0.05em' }}>CONTACT</span>
+              {resumeData.email && <div style={{ wordBreak: 'break-all' }}>📧 {resumeData.email}</div>}
+              {resumeData.phone && <div>📞 {resumeData.phone}</div>}
+              {resumeData.linkedin && <div style={{ wordBreak: 'break-all' }}>🔗 {resumeData.linkedin}</div>}
+              {resumeData.location && <div>📍 {resumeData.location}</div>}
+            </div>
+
+            {resumeData.skills && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                <span style={{ fontWeight: 600, borderBottom: `1.5px solid ${templateAccent}44`, paddingBottom: '0.2rem', color: templateAccent, fontSize: '0.75rem', letterSpacing: '0.05em' }}>SKILLS</span>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {resumeData.skills.split(',').map(s => s.trim()).filter(Boolean).map(skill => (
+                    <span key={skill} style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem', background: '#f1f5f9', color: '#334155', borderRadius: '4px', borderLeft: `2.5px solid ${templateAccent}` }}>
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {resumeData.education && resumeData.education.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                <span style={{ fontWeight: 600, borderBottom: `1.5px solid ${templateAccent}44`, paddingBottom: '0.2rem', color: templateAccent, fontSize: '0.75rem', letterSpacing: '0.05em' }}>EDUCATION</span>
+                {resumeData.education.map((edu, idx) => (
+                  <div key={idx} style={{ fontSize: '0.75rem', color: '#475569' }}>
+                    <div style={{ fontWeight: 700, color: '#1e293b' }}>{edu.degree}</div>
+                    <div style={{ fontStyle: 'italic' }}>{edu.school}</div>
+                    <div style={{ fontSize: '0.7rem', marginTop: '0.1rem' }}>{edu.year}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Main Content Area */}
+          <div style={{ padding: '2.5rem 3rem', display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+            {resumeData.summary && (
+              <div>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: templateAccent, letterSpacing: '0.05em', borderBottom: `1px solid #f1f5f9`, paddingBottom: '0.4rem' }}>PROFESSIONAL PROFILE</h3>
+                <p style={{ color: '#334155', marginTop: '0.75rem', fontSize: '0.85rem' }}>{resumeData.summary}</p>
+              </div>
+            )}
+
+            {resumeData.experiences && resumeData.experiences.length > 0 && (
+              <div>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: templateAccent, letterSpacing: '0.05em', borderBottom: `1px solid #f1f5f9`, paddingBottom: '0.4rem', marginBottom: '1rem' }}>WORK HISTORY</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {resumeData.experiences.map((exp, idx) => (
+                    <div key={idx}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h4 style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.85rem' }}>{exp.role} <span style={{ fontWeight: 400, color: '#64748b' }}>at {exp.company}</span></h4>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>{exp.duration}</span>
+                      </div>
+                      {renderBullets(exp.bulletPoints)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    if (templateLayout === 'creative') {
+      return (
+        <div style={{ ...containerStyle, borderTop: `12px solid ${templateAccent}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '2.5rem' }}>
+            <div>
+              <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: '#0f172a', margin: 0, borderBottom: 'none' }}>{resumeData.name || 'Your Name'}</h1>
+              <p style={{ fontSize: '1rem', color: templateAccent, fontWeight: 600, marginTop: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{resumeData.title}</p>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.8rem', color: '#475569', textAlign: 'right' }}>
+              {resumeData.email && <div>{resumeData.email} 📧</div>}
+              {resumeData.phone && <div>{resumeData.phone} 📞</div>}
+              {resumeData.linkedin && <div>{resumeData.linkedin} 🔗</div>}
+              {resumeData.location && <div>{resumeData.location} 📍</div>}
+            </div>
+          </div>
+
+          {resumeData.summary && (
+            <div style={{ marginBottom: '2rem', background: `${templateAccent}06`, padding: '1.5rem', borderRadius: '12px', borderLeft: `4px solid ${templateAccent}` }}>
+              <h3 style={{ fontSize: '0.85rem', fontWeight: 800, color: templateAccent, textTransform: 'uppercase', margin: '0 0 0.5rem 0' }}>About Me</h3>
+              <p style={{ margin: 0, color: '#334155' }}>{resumeData.summary}</p>
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1.8fr 1fr', gap: '2.5rem' }}>
+            <div>
+              {resumeData.experiences && resumeData.experiences.length > 0 && (
+                <div style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', borderBottom: `2.5px solid ${templateAccent}`, paddingBottom: '0.3rem', textTransform: 'uppercase', marginBottom: '1rem' }}>Professional Path</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    {resumeData.experiences.map((exp, idx) => (
+                      <div key={idx}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                          <h4 style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.85rem' }}>{exp.role} @ {exp.company}</h4>
+                          <span style={{ fontSize: '0.7rem', color: templateAccent, fontWeight: 600 }}>{exp.duration}</span>
+                        </div>
+                        {renderBullets(exp.bulletPoints)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              {resumeData.skills && (
+                <div style={{ marginBottom: '2rem' }}>
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', borderBottom: `2.5px solid ${templateAccent}`, paddingBottom: '0.3rem', textTransform: 'uppercase', marginBottom: '1rem' }}>Core Stack</h3>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {resumeData.skills.split(',').map(s => s.trim()).filter(Boolean).map(skill => (
+                      <span key={skill} style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', background: '#f1f5f9', color: '#1e293b', borderRadius: '20px', border: `1px solid ${templateAccent}22` }}>
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {resumeData.education && resumeData.education.length > 0 && (
+                <div>
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', borderBottom: `2.5px solid ${templateAccent}`, paddingBottom: '0.3rem', textTransform: 'uppercase', marginBottom: '1rem' }}>Credentials</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {resumeData.education.map((edu, idx) => (
+                      <div key={idx}>
+                        <h4 style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.8rem' }}>{edu.degree}</h4>
+                        <div style={{ fontSize: '0.75rem', color: '#475569', fontStyle: 'italic' }}>{edu.school}</div>
+                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{edu.year}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Classic Layout
+    return (
+      <div style={containerStyle}>
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <h1 style={{ fontSize: '2.2rem', color: '#111827', fontWeight: 800, margin: 0, borderBottom: 'none' }}>{resumeData.name || 'Your Name'}</h1>
+          {resumeData.title && <p style={{ color: templateAccent, fontSize: '1rem', fontWeight: 600, marginTop: '0.25rem' }}>{resumeData.title}</p>}
+          <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '0.75rem', fontSize: '0.8rem', color: '#475569', marginTop: '0.5rem' }}>
+            {resumeData.email && <span>{resumeData.email}</span>}
+            {resumeData.email && (resumeData.phone || resumeData.linkedin || resumeData.location) && <span>•</span>}
+            {resumeData.phone && <span>{resumeData.phone}</span>}
+            {resumeData.phone && (resumeData.linkedin || resumeData.location) && <span>•</span>}
+            {resumeData.linkedin && <span>{resumeData.linkedin}</span>}
+            {resumeData.linkedin && resumeData.location && <span>•</span>}
+            {resumeData.location && <span>{resumeData.location}</span>}
+          </div>
+        </div>
+
+        {resumeData.summary && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: templateAccent, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Summary</h3>
+            <hr style={hrStyle} />
+            <p style={{ color: '#374151', fontSize: '0.9rem' }}>{resumeData.summary}</p>
+          </div>
+        )}
+
+        {resumeData.experiences && resumeData.experiences.length > 0 && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: templateAccent, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Experience</h3>
+            <hr style={hrStyle} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              {resumeData.experiences.map((exp, idx) => (
+                <div key={idx}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <h4 style={{ fontWeight: 700, color: '#111827', fontSize: '0.95rem' }}>{exp.role} at {exp.company}</h4>
+                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{exp.duration}</span>
+                  </div>
+                  {renderBullets(exp.bulletPoints)}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {resumeData.education && resumeData.education.length > 0 && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: templateAccent, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Education</h3>
+            <hr style={hrStyle} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {resumeData.education.map((edu, idx) => (
+                <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                  <div>
+                    <h4 style={{ fontWeight: 700, color: '#111827', fontSize: '0.9rem' }}>{edu.degree}</h4>
+                    <span style={{ fontSize: '0.8rem', color: '#475569', fontStyle: 'italic' }}>{edu.school}</span>
+                  </div>
+                  <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{edu.year}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {resumeData.skills && (
+          <div>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: templateAccent, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Skills</h3>
+            <hr style={hrStyle} />
+            <p style={{ color: '#374151', fontSize: '0.9rem' }}>{resumeData.skills}</p>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -546,6 +1069,9 @@ function App() {
                     <button className={`tab-btn ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => setActiveTab('templates')}>
                       <Palette size={16} /> TEMPLATE_CUSTOMIZER
                     </button>
+                    <button className={`tab-btn ${activeTab === 'interview' ? 'active' : ''}`} onClick={() => setActiveTab('interview')}>
+                      <Brain size={16} /> INTERVIEW_COPILOT
+                    </button>
                   </div>
                 </motion.div>
 
@@ -657,6 +1183,48 @@ function App() {
                           ))}
                         </div>
                       </div>
+
+                      {/* Keyword Density / JD Term Frequency */}
+                      <SpotlightCard style={{ padding: '2.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                          <Search size={22} color="var(--accent-primary)" />
+                          <h3 style={{ fontSize: '1.25rem', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>KEYWORD_DENSITY_ANALYSIS</h3>
+                        </div>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '2rem' }}>
+                          Critical keywords identified in the Job Description, compared with frequency in your resume. Optimizing these values will bypass automated ATS filter thresholds.
+                        </p>
+                        
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '1.5rem' }}>
+                          {getKeywordDensity(editedResume, jobDescription).map(item => (
+                            <div 
+                              key={item.word} 
+                              style={{ 
+                                background: 'rgba(255, 255, 255, 0.02)', 
+                                border: '1px solid rgba(255, 255, 255, 0.05)', 
+                                padding: '1.25rem', 
+                                borderRadius: '10px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '0.75rem'
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 700, textTransform: 'capitalize', color: 'var(--text-primary)' }}>{item.word}</span>
+                                <span 
+                                  className={`badge ${item.status === 'optimal' ? 'badge-success' : item.status === 'low' ? 'badge-warning' : 'badge-danger'}`}
+                                  style={{ fontSize: '0.6rem' }}
+                                >
+                                  {item.status.toUpperCase()}
+                                </span>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                <span>Found in Resume: <strong>{item.resumeCount}</strong></span>
+                                <span>J.D. Requires: <strong>{item.jdCount}+</strong></span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </SpotlightCard>
                     </motion.div>
                   )}
 
@@ -802,18 +1370,234 @@ function App() {
                       transition={{ duration: 0.3 }}
                       className="workspace-grid"
                     >
-                      {/* Left: Markdown Editor */}
+                      {/* Left: Input Editor Section */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', fontWeight: 600 }}>MARKDOWN_SOURCE_EDITOR</span>
-                          <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>Edits compile live on the right</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                          <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', fontWeight: 600 }}>WORKSPACE_INPUT_MODE</span>
+                          <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '0.25rem', borderRadius: '6px' }}>
+                            <button 
+                              className={`hud-button ${!isFormWizard ? 'active' : ''}`} 
+                              onClick={() => {
+                                const data = parseMarkdownToData(editedResume);
+                                setResumeData(data);
+                                setIsFormWizard(false);
+                              }}
+                              style={{ padding: '0.35rem 0.75rem', fontSize: '0.7rem', height: 'auto', border: 'none', background: !isFormWizard ? 'var(--accent-primary)' : 'transparent', color: '#fff', borderRadius: '4px' }}
+                            >
+                              MARKDOWN
+                            </button>
+                            <button 
+                              className={`hud-button ${isFormWizard ? 'active' : ''}`} 
+                              onClick={() => {
+                                setIsFormWizard(true);
+                              }}
+                              style={{ padding: '0.35rem 0.75rem', fontSize: '0.7rem', height: 'auto', border: 'none', background: isFormWizard ? 'var(--accent-primary)' : 'transparent', color: '#fff', borderRadius: '4px' }}
+                            >
+                              FORM_WIZARD
+                            </button>
+                          </div>
                         </div>
-                        <textarea
-                          className="editor-textarea"
-                          value={editedResume}
-                          onChange={(e) => setEditedResume(e.target.value)}
-                          placeholder="Your optimized markdown resume starts here..."
-                        />
+
+                        {isFormWizard ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxHeight: '650px', overflowY: 'auto', paddingRight: '0.5rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>FULL_NAME</label>
+                                <input 
+                                  type="text" 
+                                  value={resumeData.name} 
+                                  onChange={(e) => setResumeData(prev => ({ ...prev, name: e.target.value }))}
+                                  placeholder="e.g. Sumit Kumar"
+                                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: '#fff' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>PROFESSIONAL_TITLE</label>
+                                <input 
+                                  type="text" 
+                                  value={resumeData.title} 
+                                  onChange={(e) => setResumeData(prev => ({ ...prev, title: e.target.value }))}
+                                  placeholder="e.g. Senior Software Engineer"
+                                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: '#fff' }}
+                                />
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>EMAIL</label>
+                                <input 
+                                  type="email" 
+                                  value={resumeData.email} 
+                                  onChange={(e) => setResumeData(prev => ({ ...prev, email: e.target.value }))}
+                                  placeholder="e.g. sumit.kumar@example.com"
+                                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: '#fff' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>PHONE</label>
+                                <input 
+                                  type="text" 
+                                  value={resumeData.phone} 
+                                  onChange={(e) => setResumeData(prev => ({ ...prev, phone: e.target.value }))}
+                                  placeholder="e.g. +91 98765 43210"
+                                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: '#fff' }}
+                                />
+                              </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                              <div>
+                                <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>LINKEDIN_URL</label>
+                                <input 
+                                  type="text" 
+                                  value={resumeData.linkedin} 
+                                  onChange={(e) => setResumeData(prev => ({ ...prev, linkedin: e.target.value }))}
+                                  placeholder="e.g. linkedin.com/in/sumitkumar"
+                                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: '#fff' }}
+                                />
+                              </div>
+                              <div>
+                                <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>LOCATION</label>
+                                <input 
+                                  type="text" 
+                                  value={resumeData.location} 
+                                  onChange={(e) => setResumeData(prev => ({ ...prev, location: e.target.value }))}
+                                  placeholder="e.g. New Delhi, India"
+                                  style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: '#fff' }}
+                                />
+                              </div>
+                            </div>
+
+                            <div>
+                              <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>SUMMARY</label>
+                              <textarea 
+                                rows={4}
+                                value={resumeData.summary}
+                                onChange={(e) => setResumeData(prev => ({ ...prev, summary: e.target.value }))}
+                                placeholder="Describe your executive summary..."
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: '#fff', fontSize: '0.85rem' }}
+                              />
+                            </div>
+
+                            {/* Experience Section */}
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>PROFESSIONAL_EXPERIENCE</label>
+                                <button onClick={addExperience} className="btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <Plus size={10} /> ADD_EXP
+                                </button>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {resumeData.experiences && resumeData.experiences.map((exp, idx) => (
+                                  <div key={idx} style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+                                    <button onClick={() => removeExperience(idx)} style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>
+                                      <Trash2 size={14} />
+                                    </button>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                      <input 
+                                        type="text" 
+                                        placeholder="Role" 
+                                        value={exp.role} 
+                                        onChange={(e) => updateExperience(idx, 'role', e.target.value)}
+                                        style={{ padding: '0.5rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.8rem' }}
+                                      />
+                                      <input 
+                                        type="text" 
+                                        placeholder="Company" 
+                                        value={exp.company} 
+                                        onChange={(e) => updateExperience(idx, 'company', e.target.value)}
+                                        style={{ padding: '0.5rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.8rem' }}
+                                      />
+                                    </div>
+                                    <input 
+                                      type="text" 
+                                      placeholder="Duration (e.g. 2021 - Present)" 
+                                      value={exp.duration} 
+                                      onChange={(e) => updateExperience(idx, 'duration', e.target.value)}
+                                      style={{ padding: '0.5rem', width: '100%', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.8rem' }}
+                                    />
+                                    <textarea 
+                                      rows={3} 
+                                      placeholder="Bullet points (one per line)" 
+                                      value={exp.bulletPoints} 
+                                      onChange={(e) => updateExperience(idx, 'bulletPoints', e.target.value)}
+                                      style={{ padding: '0.5rem', width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Education Section */}
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>EDUCATION_CREDENTIALS</label>
+                                <button onClick={addEducation} className="btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                  <Plus size={10} /> ADD_EDU
+                                </button>
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                {resumeData.education && resumeData.education.map((edu, idx) => (
+                                  <div key={idx} style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', position: 'relative' }}>
+                                    <button onClick={() => removeEducation(idx)} style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer' }}>
+                                      <Trash2 size={14} />
+                                    </button>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                      <input 
+                                        type="text" 
+                                        placeholder="Degree" 
+                                        value={edu.degree} 
+                                        onChange={(e) => updateEducation(idx, 'degree', e.target.value)}
+                                        style={{ padding: '0.5rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.8rem' }}
+                                      />
+                                      <input 
+                                        type="text" 
+                                        placeholder="School" 
+                                        value={edu.school} 
+                                        onChange={(e) => updateEducation(idx, 'school', e.target.value)}
+                                        style={{ padding: '0.5rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.8rem' }}
+                                      />
+                                    </div>
+                                    <input 
+                                      type="text" 
+                                      placeholder="Year" 
+                                      value={edu.year} 
+                                      onChange={(e) => updateEducation(idx, 'year', e.target.value)}
+                                      style={{ padding: '0.5rem', width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.8rem' }}
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Skills Section */}
+                            <div>
+                              <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>SKILLS (COMMA SEPARATED)</label>
+                              <input 
+                                type="text" 
+                                value={resumeData.skills} 
+                                onChange={(e) => setResumeData(prev => ({ ...prev, skills: e.target.value }))}
+                                placeholder="e.g. React, Node.js, JavaScript, Docker"
+                                style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: '#fff' }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <textarea
+                            className="editor-textarea"
+                            value={editedResume}
+                            onChange={(e) => {
+                              setEditedResume(e.target.value);
+                              // Sync to form wizard in background
+                              try {
+                                const parsed = parseMarkdownToData(e.target.value);
+                                setResumeData(parsed);
+                              } catch(err){}
+                            }}
+                            placeholder="Your optimized markdown resume starts here..."
+                          />
+                        )}
                       </div>
 
                       {/* Right: Live preview sheet */}
@@ -834,33 +1618,12 @@ function App() {
                         <div 
                           ref={resumePrintRef}
                           style={{
-                            background: '#ffffff', 
-                            padding: '3rem', 
-                            borderRadius: '20px', 
-                            color: '#1f2937',
-                            boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
-                            fontSize: '0.95rem',
-                            lineHeight: '1.5',
-                            fontFamily: 'inherit',
-                            borderTop: `6px solid ${templateAccent}`,
                             minHeight: '650px',
-                            textAlign: 'left'
+                            width: '100%',
+                            overflow: 'hidden'
                           }}
                         >
-                          <ReactMarkdown
-                            components={{
-                              h1: ({ node, ...props }) => <h1 style={{ color: templateAccent, fontSize: '1.9rem', borderBottom: `2px solid ${templateAccent}22`, paddingBottom: '0.5rem', marginTop: '1.4rem', marginBottom: '0.8rem', fontWeight: 800 }} {...props} />,
-                              h2: ({ node, ...props }) => <h2 style={{ color: '#111827', fontSize: '1.35rem', borderBottom: '1px solid #e5e7eb', paddingBottom: '0.25rem', marginTop: '1.25rem', marginBottom: '0.5rem', fontWeight: 700 }} {...props} />,
-                              h3: ({ node, ...props }) => <h3 style={{ color: '#374151', fontSize: '1.1rem', marginTop: '1rem', marginBottom: '0.25rem', fontWeight: 600 }} {...props} />,
-                              p: ({ node, ...props }) => <p style={{ marginBottom: '0.75rem', color: '#374151' }} {...props} />,
-                              li: ({ node, ...props }) => <li style={{ marginBottom: '0.4rem', color: '#374151' }} {...props} />,
-                              ul: ({ node, ...props }) => <ul style={{ paddingLeft: '1.25rem', marginBottom: '0.75rem' }} {...props} />,
-                              ol: ({ node, ...props }) => <ol style={{ paddingLeft: '1.25rem', marginBottom: '0.75rem' }} {...props} />,
-                              a: ({ node, ...props }) => <a style={{ color: templateAccent, textDecoration: 'underline' }} {...props} />,
-                            }}
-                          >
-                            {editedResume}
-                          </ReactMarkdown>
+                          {renderResumeSheet()}
                         </div>
                       </div>
                     </motion.div>
@@ -882,6 +1645,16 @@ function App() {
                           <h4 style={{ fontSize: '0.85rem', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.75rem' }}>
                             DESIGN_CONTROLS
                           </h4>
+
+                          {/* Layout Template presets */}
+                          <div className="customizer-section">
+                            <span className="customizer-section-title">LAYOUT_TEMPLATE</span>
+                            <div className="selector-grid" style={{ gridTemplateColumns: '1fr', gap: '0.5rem' }}>
+                              <button className={`selector-btn ${templateLayout === 'classic' ? 'active' : ''}`} onClick={() => setTemplateLayout('classic')}>Classic Executive</button>
+                              <button className={`selector-btn ${templateLayout === 'modern' ? 'active' : ''}`} onClick={() => setTemplateLayout('modern')}>Modern Two-Column</button>
+                              <button className={`selector-btn ${templateLayout === 'creative' ? 'active' : ''}`} onClick={() => setTemplateLayout('creative')}>Creative Minimalist</button>
+                            </div>
+                          </div>
 
                           {/* Accent Color dot selectors */}
                           <div className="customizer-section">
@@ -966,94 +1739,97 @@ function App() {
                         <div 
                           ref={resumePrintRef}
                           style={{
-                            background: '#ffffff',
-                            color: '#111827',
-                            padding: templateMargin === 'narrow' ? '2.5rem' : templateMargin === 'wide' ? '5.5rem' : '4rem',
-                            borderRadius: '16px',
-                            boxShadow: '0 25px 60px rgba(0,0,0,0.3)',
-                            fontSize: templateFontSize === 'compact' ? '0.85rem' : templateFontSize === 'large' ? '1.05rem' : '0.95rem',
-                            lineHeight: templateLineHeight,
-                            fontFamily: templateFont === 'serif' ? 'Georgia, serif' : templateFont === 'mono' ? 'Courier New, monospace' : 'inherit',
-                            borderTop: `8px solid ${templateAccent}`,
-                            maxWidth: '820px',
-                            margin: '0 auto',
-                            textAlign: 'left'
+                            minHeight: '650px',
+                            width: '100%',
+                            overflow: 'hidden'
                           }}
                         >
-                          <ReactMarkdown
-                            components={{
-                              h1: ({ node, ...props }) => (
-                                <h1 style={{ 
-                                  color: templateAccent, 
-                                  fontSize: templateFontSize === 'compact' ? '1.75rem' : templateFontSize === 'large' ? '2.3rem' : '2rem', 
-                                  borderBottom: `2px solid ${templateAccent}25`, 
-                                  paddingBottom: '0.5rem', 
-                                  marginTop: '1.5rem', 
-                                  marginBottom: '0.8rem',
-                                  fontWeight: 800,
-                                  fontFamily: templateFont === 'serif' ? 'Georgia, serif' : 'inherit'
-                                }} {...props} />
-                              ),
-                              h2: ({ node, ...props }) => (
-                                <h2 style={{ 
-                                  color: '#111827', 
-                                  fontSize: templateFontSize === 'compact' ? '1.2rem' : templateFontSize === 'large' ? '1.5rem' : '1.35rem', 
-                                  borderBottom: '1px solid #e5e7eb', 
-                                  paddingBottom: '0.2,rem', 
-                                  marginTop: '1.3rem', 
-                                  marginBottom: '0.5rem',
-                                  fontWeight: 700
-                                }} {...props} />
-                              ),
-                              h3: ({ node, ...props }) => (
-                                <h3 style={{ 
-                                  color: '#374151', 
-                                  fontSize: templateFontSize === 'compact' ? '1.0rem' : templateFontSize === 'large' ? '1.2rem' : '1.1rem', 
-                                  marginTop: '1.1rem', 
-                                  marginBottom: '0.25rem',
-                                  fontWeight: 600
-                                }} {...props} />
-                              ),
-                              p: ({ node, ...props }) => (
-                                <p style={{ 
-                                  marginBottom: '0.75rem', 
-                                  color: '#374151',
-                                  fontSize: 'inherit',
-                                  lineHeight: 'inherit'
-                                }} {...props} />
-                              ),
-                              li: ({ node, ...props }) => (
-                                <li style={{ 
-                                  marginBottom: '0.45rem', 
-                                  color: '#374151',
-                                  fontSize: 'inherit',
-                                  lineHeight: 'inherit'
-                                }} {...props} />
-                              ),
-                              ul: ({ node, ...props }) => (
-                                <ul style={{ 
-                                  paddingLeft: '1.35rem',
-                                  marginBottom: '0.9rem'
-                                }} {...props} />
-                              ),
-                              ol: ({ node, ...props }) => (
-                                <ol style={{ 
-                                  paddingLeft: '1.35rem',
-                                  marginBottom: '0.9rem'
-                                }} {...props} />
-                              ),
-                              a: ({ node, ...props }) => (
-                                <a style={{ 
-                                  color: templateAccent, 
-                                  textDecoration: 'underline' 
-                                }} {...props} />
-                              ),
-                            }}
-                          >
-                            {editedResume}
-                          </ReactMarkdown>
+                          {renderResumeSheet()}
                         </div>
                       </div>
+                    </motion.div>
+                  )}
+
+                  {/* TAB 5: INTERVIEW_COPILOT */}
+                  {activeTab === 'interview' && (
+                    <motion.div
+                      key="interview-tab"
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -15 }}
+                      transition={{ duration: 0.3 }}
+                      style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                        <div>
+                          <h3 style={{ fontSize: '1.4rem', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Brain size={22} color="var(--accent-primary)" /> INTERVIEW_PREPARATION_COPILOT
+                          </h3>
+                          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                            AI generated situational interview questions based on the gaps identified between your resume and Job Description.
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => handleFetchInterviewQuestions(editedResume, jobDescription)} 
+                          className="btn-primary-small"
+                          disabled={isGeneratingQuestions}
+                          style={{ background: 'var(--accent-primary)', border: 'none', color: '#fff', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                        >
+                          {isGeneratingQuestions ? (
+                            <>
+                              <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> REGENERATING...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw size={14} /> RE-GENERATE
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {isGeneratingQuestions ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6rem' }}>
+                          <RefreshCw size={32} style={{ animation: 'spin 2s linear infinite', color: 'var(--accent-primary)' }} />
+                          <p style={{ marginTop: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>CREATING_INTERVIEW_MAP...</p>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                          {interviewQuestions && interviewQuestions.length > 0 ? (
+                            interviewQuestions.map((q, idx) => (
+                              <SpotlightCard key={idx} style={{ padding: '2.5rem' }}>
+                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                                  <div style={{ background: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent-primary)', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0 }}>
+                                    {idx + 1}
+                                  </div>
+                                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                    <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: '1.4' }}>
+                                      {q.question}
+                                    </h4>
+                                    
+                                    <div style={{ borderLeft: '3px solid rgba(255,255,255,0.08)', paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                      <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)', fontWeight: 600 }}>RATIONALE</span>
+                                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                                        {q.rationale}
+                                      </p>
+                                    </div>
+
+                                    <div style={{ borderLeft: '3px solid var(--accent-secondary)', paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                      <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-secondary)', fontWeight: 600 }}>STAR_PREPARATION_TIP</span>
+                                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                                        {q.tip}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </SpotlightCard>
+                            ))
+                          ) : (
+                            <SpotlightCard style={{ padding: '3rem', textAlign: 'center' }}>
+                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>No questions generated yet. Click Re-generate to create interview prep questions.</p>
+                            </SpotlightCard>
+                          )}
+                        </div>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>

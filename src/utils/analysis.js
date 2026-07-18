@@ -242,4 +242,117 @@ export const revampBulletPoint = async (bulletText, apiKey, modelName = 'gemini-
   return data.candidates[0].content.parts[0].text.trim();
 };
 
+export const getKeywordDensity = (resumeText = '', jobDescription = '') => {
+  if (!resumeText || !jobDescription) return [];
+  
+  const cleanAndTokenize = (txt) => {
+    return txt.toLowerCase()
+      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, " ")
+      .split(/\s+/)
+      .filter(w => w.length > 2);
+  };
+  
+  const resumeWords = cleanAndTokenize(resumeText);
+  const jdWords = cleanAndTokenize(jobDescription);
+  
+  const stopwords = new Set([
+    'and', 'the', 'for', 'with', 'from', 'our', 'your', 'this', 'that', 'with', 'about', 
+    'are', 'was', 'were', 'will', 'been', 'have', 'has', 'had', 'should', 'could', 'would',
+    'but', 'not', 'you', 'they', 'them', 'their', 'who', 'whom', 'which', 'what', 'why', 'how',
+    'can', 'may', 'its', 'their', 'into', 'onto', 'upon', 'than', 'then', 'once', 'here', 'there',
+    'when', 'where', 'both', 'each', 'more', 'most', 'some', 'such', 'only', 'own', 'same', 'so',
+    'than', 'too', 'very', 's', 't', 'can', 'will', 'just', 'should', 'now', 'any', 'other', 'the',
+    'we', 'our', 'you', 'your', 'their', 'they', 'them', 'our', 'who', 'whom', 'which'
+  ]);
+  
+  const jdFreq = {};
+  jdWords.forEach(w => {
+    if (!stopwords.has(w)) {
+      jdFreq[w] = (jdFreq[w] || 0) + 1;
+    }
+  });
+  
+  const resumeFreq = {};
+  resumeWords.forEach(w => {
+    if (!stopwords.has(w)) {
+      resumeFreq[w] = (resumeFreq[w] || 0) + 1;
+    }
+  });
+  
+  const topJdKeywords = Object.entries(jdFreq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 12)
+    .map(([word, jdCount]) => {
+      const resumeCount = resumeFreq[word] || 0;
+      return {
+        word,
+        jdCount,
+        resumeCount,
+        match: resumeCount > 0,
+        status: resumeCount >= jdCount ? 'optimal' : resumeCount > 0 ? 'low' : 'missing'
+      };
+    });
+    
+  return topJdKeywords;
+};
+
+export const getInterviewPrepQuestions = async (resumeText, jobDescription, apiKey, modelName = 'gemini-2.5-flash') => {
+  if (!apiKey) {
+    return [
+      {
+        question: "Can you detail a situation where you had to quickly learn or apply technologies that were missing from your active stack?",
+        rationale: "Addresses technical skill gaps highlighted in the JD match report.",
+        tip: "Explain your learning strategy, resources utilized, and show a fast time-to-value."
+      },
+      {
+        question: "Describe a project where you successfully improved front-end performance or scalability. What metrics did you track?",
+        rationale: "Measures frontend core competency alignment.",
+        tip: "Talk about metrics like page load speed, bundle sizes, lighthouse scores, or API response latency."
+      },
+      {
+        question: "How do you handle conflict or prioritize features when collaborating in a cross-functional product team?",
+        rationale: "Validates agility and product lifecycle knowledge.",
+        tip: "Use the STAR method: describe a situation, the task to achieve, the negotiation actions you took, and the positive project outcome."
+      }
+    ];
+  }
+  
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  const prompt = `You are an expert technical interviewer. Compare the candidate's resume with the job description. Identify critical skill gaps and key responsibilities. 
+  Generate 3 high-yield behavioral or technical interview questions tailored specifically for this candidate to prepare them for the role.
+  For each question, provide:
+  1. The question itself.
+  2. Rationale (why the interviewer is asking this based on their gaps or JD requirements).
+  3. Tips to answer using the STAR method.
+  
+  Format the response ONLY as a JSON array of objects with the keys "question", "rationale", and "tip". Return nothing but valid raw JSON.
+  
+  Resume:
+  "${resumeText}"
+  
+  Job Description:
+  "${jobDescription}"`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: prompt }]
+      }]
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API Error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates[0].content.parts[0].text.trim();
+  const cleaned = rawText.replace(/```json/i, '').replace(/```/g, '').trim();
+  return JSON.parse(cleaned);
+};
+
 
