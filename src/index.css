@@ -737,4 +737,81 @@ select.settings-input {
   gap: 0.5rem;
 }
 
+/* ==========================================================================
+   ADVANCED PREMIUM GLOW & TRANSITION TOKENS
+   ========================================================================== */
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  transform: translateX(-100%) skewX(-15deg);
+  transition: transform 0.7s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.btn-primary:hover::after {
+  transform: translateX(100%) skewX(-15deg);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 25px rgba(255, 255, 255, 0.25), 0 10px 20px rgba(0, 0, 0, 0.3) !important;
+  border-color: rgba(255,255,255,0.4) !important;
+}
+
+.tab-btn {
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.tab-btn.active::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 15%;
+  right: 15%;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+  border-radius: 2px;
+  box-shadow: 0 0 12px var(--accent-primary);
+  animation: tabGlowSlide 0.35s cubic-bezier(0.23, 1, 0.32, 1) forwards;
+}
+
+@keyframes tabGlowSlide {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+.score-dial-glow {
+  filter: drop-shadow(0 0 12px var(--accent-primary));
+  animation: floatRing 4s infinite ease-in-out alternate;
+}
+
+@keyframes floatRing {
+  from { filter: drop-shadow(0 0 8px var(--accent-primary)); }
+  to { filter: drop-shadow(0 0 18px var(--accent-secondary)); }
+}
+
+/* Custom interactive input animations */
+input:focus, textarea:focus, select:focus {
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.12), 0 0 15px rgba(99, 102, 241, 0.1) !important;
+}
+
+/* Wizard edit sections visual card hover */
+.wizard-section-card {
+  transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.wizard-section-card:hover {
+  border-color: rgba(99, 102, 241, 0.25) !important;
+  box-shadow: 0 15px 35px -10px rgba(99, 102, 241, 0.08) !important;
+  transform: translateY(-2px);
+}
+
+
 

@@ -65,22 +65,38 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 // --- COMPONENTS ---
 
 const SpotlightCard = ({ children, className = "", style = {} }) => {
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
+  const mouseX = useMotionValue(200);
+  const mouseY = useMotionValue(200);
+
+  // Transform values for 3D tilt effect
+  const rotateX = useSpring(useTransform(mouseY, [0, 400], [6, -6]), { damping: 25, stiffness: 200 });
+  const rotateY = useSpring(useTransform(mouseX, [0, 400], [-6, 6]), { damping: 25, stiffness: 200 });
 
   function handleMouseMove({ currentTarget, clientX, clientY }) {
-    let { left, top } = currentTarget.getBoundingClientRect();
-    mouseX.set(clientX - left);
-    mouseY.set(clientY - top);
+    let { left, top, width, height } = currentTarget.getBoundingClientRect();
+    const x = clientX - left;
+    const y = clientY - top;
+    mouseX.set(x);
+    mouseY.set(y);
+  }
+
+  function handleMouseLeave() {
+    mouseX.set(200);
+    mouseY.set(200);
   }
 
   return (
     <motion.div
       onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       className={`glass ${className}`}
       style={{
         position: 'relative',
         overflow: 'hidden',
+        perspective: 1000,
+        rotateX: rotateX,
+        rotateY: rotateY,
+        transformStyle: 'preserve-3d',
         ...style
       }}
     >
@@ -88,7 +104,7 @@ const SpotlightCard = ({ children, className = "", style = {} }) => {
         style={{
           background: useTransform(
             [mouseX, mouseY],
-            ([x, y]) => `radial-gradient(400px circle at ${x}px ${y}px, rgba(99, 102, 241, 0.15), transparent 80%)`
+            ([x, y]) => `radial-gradient(450px circle at ${x}px ${y}px, rgba(99, 102, 241, 0.15), transparent 80%)`
           ),
           position: 'absolute',
           inset: 0,
@@ -96,7 +112,7 @@ const SpotlightCard = ({ children, className = "", style = {} }) => {
           pointerEvents: 'none'
         }}
       />
-      <div style={{ position: 'relative', zIndex: 1 }}>{children}</div>
+      <div style={{ position: 'relative', zIndex: 1, transform: 'translateZ(10px)' }}>{children}</div>
     </motion.div>
   );
 };
@@ -419,6 +435,7 @@ function App() {
   const [templateLayout, setTemplateLayout] = useState('classic'); // 'classic', 'modern', 'creative'
   const [isFormWizard, setIsFormWizard] = useState(false);
   const [interviewQuestions, setInterviewQuestions] = useState([]);
+  const [loadingStep, setLoadingStep] = useState(0);
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
   const [resumeData, setResumeData] = useState({
     name: '',
@@ -485,10 +502,16 @@ function App() {
     if (!resume || !jobDescription) return;
     setIsAnalyzing(true);
     setApiError(null);
+    setLoadingStep(0);
+    
+    const interval = setInterval(() => {
+      setLoadingStep(prev => (prev < 6 ? prev + 1 : prev));
+    }, 450);
     
     if (apiKey) {
       try {
         const geminiResults = await analyzeResumeWithGemini(resume, jobDescription, apiKey, selectedModel);
+        clearInterval(interval);
         setResults(geminiResults);
         setEditedResume(geminiResults.finalResume);
         
@@ -502,6 +525,7 @@ function App() {
         // Fetch interview questions
         handleFetchInterviewQuestions(geminiResults.finalResume, jobDescription);
       } catch (error) {
+        clearInterval(interval);
         console.error(error);
         setApiError(error.message || 'Failed to connect to Gemini API. Please check your API key.');
         setIsAnalyzing(false);
@@ -509,6 +533,7 @@ function App() {
     } else {
       // Fallback: Heuristic Analysis Engine
       setTimeout(() => {
+        clearInterval(interval);
         const liveResults = analyzeResume(resume, jobDescription);
         setResults(liveResults);
         setEditedResume(liveResults.finalResume);
@@ -522,7 +547,7 @@ function App() {
 
         // Fetch interview questions
         handleFetchInterviewQuestions(liveResults.finalResume, jobDescription);
-      }, 2500);
+      }, 2800);
     }
   };
 
@@ -1017,19 +1042,80 @@ function App() {
             {isAnalyzing && (
               <motion.div
                 key="loading"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '10rem 0' }}
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '3rem', alignItems: 'center', padding: '6rem 0', maxWidth: '900px', margin: '0 auto' }}
               >
-                <div style={{ position: 'relative', width: '200px', height: '200px' }}>
-                   <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 4, ease: "linear" }} style={{ position: 'absolute', inset: 0, border: '2px solid rgba(99, 102, 241, 0.1)', borderRadius: '50%' }} />
-                   <motion.div animate={{ rotate: -360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }} style={{ position: 'absolute', inset: '15px', border: '3px solid transparent', borderTopColor: 'var(--accent-primary)', borderRadius: '50%' }} />
-                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-                     <Activity size={48} color="var(--accent-primary)" />
-                   </div>
+                {/* Left side: Sci-Fi Hologram Ring */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ position: 'relative', width: '220px', height: '220px' }}>
+                     <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 8, ease: "linear" }} style={{ position: 'absolute', inset: 0, border: '2px dashed rgba(99, 102, 241, 0.2)', borderRadius: '50%' }} />
+                     <motion.div animate={{ rotate: -360 }} transition={{ repeat: Infinity, duration: 4, ease: "linear" }} style={{ position: 'absolute', inset: '15px', border: '3px solid transparent', borderTopColor: 'var(--accent-primary)', borderBottomColor: 'var(--accent-secondary)', borderRadius: '50%' }} />
+                     <motion.div animate={{ scale: [1, 1.08, 1] }} transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }} style={{ position: 'absolute', inset: '40px', border: '1px solid rgba(244, 63, 94, 0.15)', borderRadius: '50%', background: 'rgba(99,102,241,0.02)' }} />
+                     <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                       <Cpu size={42} color="var(--accent-primary)" style={{ animation: 'pulse 1.5s infinite' }} />
+                       <span style={{ fontSize: '0.55rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-secondary)', marginTop: '0.5rem', letterSpacing: '0.2em' }}>NEURAL_LINK</span>
+                     </div>
+                  </div>
                 </div>
-                <h3 style={{ marginTop: '3rem', fontFamily: 'var(--font-mono)', letterSpacing: '0.3em', fontSize: '0.9rem' }}>CORRELATING_DATA_POINTS...</h3>
+
+                {/* Right side: High-Tech Log Terminal Console */}
+                <SpotlightCard style={{ padding: '2rem', background: 'rgba(0,0,0,0.4)', minHeight: '280px', display: 'flex', flexDirection: 'column', gap: '0.75rem', fontFamily: 'var(--font-mono)', border: '1px solid rgba(99, 102, 241, 0.15)', boxShadow: '0 0 30px rgba(99, 102, 241, 0.1)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', borderBottom: '1px solid rgba(255, 255, 255, 0.05)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444' }} />
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#f59e0b' }} />
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#10b981' }} />
+                    <span style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginLeft: '1rem' }}>SYSTEM_CORE_LOGS</span>
+                  </div>
+
+                  <div style={{ fontSize: '0.8rem', display: 'flex', flexDirection: 'column', gap: '0.4rem', color: 'var(--text-primary)', flexGrow: 1, textAlign: 'left' }}>
+                    {loadingStep >= 0 && (
+                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+                        <span style={{ color: 'var(--accent-primary)' }}>[SYSTEM]</span> Initializing semantic engine... <span style={{ color: 'var(--success)' }}>OK</span>
+                      </motion.div>
+                    )}
+                    {loadingStep >= 1 && (
+                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+                        <span style={{ color: 'var(--accent-secondary)' }}>[PARSER]</span> Unpacking talent profile PDF vector structure...
+                      </motion.div>
+                    )}
+                    {loadingStep >= 2 && (
+                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+                        <span style={{ color: 'var(--accent-vibrant)' }}>[ALIGN]</span> Mapping job spec constraints & criteria...
+                      </motion.div>
+                    )}
+                    {loadingStep >= 3 && (
+                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+                        <span style={{ color: 'var(--accent-primary)' }}>[DENSITY]</span> Scoring keyword frequencies and vocabulary match...
+                      </motion.div>
+                    )}
+                    {loadingStep >= 4 && (
+                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+                        <span style={{ color: 'var(--accent-secondary)' }}>[COGNITIVE]</span> Triggering LLM rewrite recommendation algorithms...
+                      </motion.div>
+                    )}
+                    {loadingStep >= 5 && (
+                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+                        <span style={{ color: 'var(--success)' }}>[COMPLIANCE]</span> Executing ATS parsing checker compliance audit...
+                      </motion.div>
+                    )}
+                    {loadingStep >= 6 && (
+                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} style={{ color: 'var(--success)', fontWeight: 'bold' }}>
+                        &gt;&gt; PIPELINE COMPLETED. REDIRECTING TO ANALYTICS_MATRIX.
+                      </motion.div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.8rem', color: 'var(--accent-primary)' }}>
+                    <span>$</span>
+                    <motion.div
+                      animate={{ opacity: [1, 0, 1] }}
+                      transition={{ repeat: Infinity, duration: 0.8 }}
+                      style={{ width: '8px', height: '14px', background: 'var(--accent-primary)' }}
+                    />
+                  </div>
+                </SpotlightCard>
               </motion.div>
             )}
 
@@ -1091,7 +1177,7 @@ function App() {
                         {/* Score Ring Card */}
                         <SpotlightCard style={{ padding: '3rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                           <div style={{ position: 'relative', width: '220px', height: '220px' }}>
-                            <svg width="220" height="220" viewBox="0 0 100 100">
+                            <svg className="score-dial-glow" width="220" height="220" viewBox="0 0 100 100">
                                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="4" />
                                <motion.circle cx="50" cy="50" r="45" fill="none" stroke="url(#scoreGrad)" strokeWidth="6" strokeDasharray="283" strokeDashoffset={283 - (283 * results.score) / 100} strokeLinecap="round" transform="rotate(-90 50 50)" />
                                <defs>
