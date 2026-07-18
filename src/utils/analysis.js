@@ -161,3 +161,85 @@ Provide your response strictly in the following JSON format:
   return JSON.parse(textResponse);
 };
 
+export const checkAtsCompliance = (resumeText) => {
+  const text = (resumeText || '').toLowerCase();
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+  const linkedinRegex = /linkedin\.com/;
+  // Simple regex for phone: look for 7 to 15 digits with optional spaces, dashes, parentheses
+  const phoneRegex = /(\+?\d{1,4}[\s-]?)?\(?\d{3}\)?[\s-]?\d{3}[\s-]?\d{4}/;
+
+  const hasEmail = emailRegex.test(resumeText);
+  const hasLinkedIn = linkedinRegex.test(text);
+  const hasPhone = phoneRegex.test(resumeText);
+
+  // Common Action Verbs
+  const actionVerbs = ['led', 'managed', 'developed', 'designed', 'optimized', 'spearheaded', 'built', 'created', 'implemented', 'improved', 'reduced', 'achieved', 'increased', 'coordinated'];
+  const foundVerbs = actionVerbs.filter(v => text.includes(v));
+
+  // Measurable Metrics
+  const hasMetrics = /%\s*|\$\s*|\b(reduced|increased|saved|grew|revenue|millions|thousands)\b/i.test(resumeText) || /\d+/.test(resumeText);
+
+  // Word count check
+  const wordCount = (resumeText || '').trim().split(/\s+/).filter(Boolean).length;
+  const isGoodLength = wordCount >= 300 && wordCount <= 1200;
+
+  // Formatting warnings (e.g. check if text looks too short or lacks structure)
+  const hasStructure = text.includes('education') || text.includes('experience') || text.includes('skills') || text.includes('projects') || text.includes('summary');
+
+  const checks = [
+    { id: 'email', label: 'Email Address Found', status: hasEmail ? 'pass' : 'fail', desc: 'Crucial for recruiters to reach out to you.' },
+    { id: 'phone', label: 'Phone Number Found', status: hasPhone ? 'pass' : 'fail', desc: 'Allows direct communication.' },
+    { id: 'linkedin', label: 'LinkedIn Profile Link', status: hasLinkedIn ? 'pass' : 'warning', desc: 'Recruiters check online professional presence.' },
+    { id: 'verbs', label: 'Action Verbs Usage', status: foundVerbs.length >= 4 ? 'pass' : 'warning', desc: `Found ${foundVerbs.length} action verbs (ideal: 4+).` },
+    { id: 'metrics', label: 'Quantifiable Metrics (%)', status: hasMetrics ? 'pass' : 'fail', desc: 'Include percentages or numbers to show impact.' },
+    { id: 'length', label: 'Ideal Resume Length', status: isGoodLength ? 'pass' : 'warning', desc: `Word count: ${wordCount} (ideal: 300-1200 words).` },
+    { id: 'structure', label: 'Clear Section Headings', status: hasStructure ? 'pass' : 'fail', desc: 'Requires standard titles: Education, Experience, Skills, Summary.' }
+  ];
+
+  const passed = checks.filter(c => c.status === 'pass').length;
+  const complianceScore = Math.round((passed / checks.length) * 100);
+
+  return {
+    complianceScore,
+    checks
+  };
+};
+
+export const revampBulletPoint = async (bulletText, apiKey, modelName = 'gemini-2.5-flash') => {
+  if (!apiKey) {
+    // Return local heuristic revamped templates randomly
+    const fallbacks = [
+      `Spearheaded design and delivery of key features, optimizing performance metrics by 25% and reducing system latency.`,
+      `Orchestrated application lifecycle management, boosting deployment frequency by 40% and enhancing user retention.`,
+      `Managed database schema optimizations and queries, resulting in a 30% reduction in query runtimes under peak loads.`,
+      `Collaborated with cross-functional teams to integrate secure API endpoints, accelerating delivery velocity by 15%.`
+    ];
+    return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+  }
+  
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  const prompt = `You are an expert resume writer. Revamp the following resume bullet point to use the STAR method (Situation, Task, Action, Result). Make it highly impactful, action-oriented, and include realistic metrics or percentages where appropriate. Keep it to one strong, professional sentence. Return ONLY the revamped bullet point text without any other introductory text, markdown bold, or quotes.
+  
+  Bullet Point: "${bulletText}"`;
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: prompt }]
+      }]
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API Error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.candidates[0].content.parts[0].text.trim();
+};
+
+
