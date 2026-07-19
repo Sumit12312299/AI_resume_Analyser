@@ -1,31 +1,40 @@
 # 🚀 Enterprise AI Career Suite (AI Resume Analyzer)
 
-A state-of-the-art, high-tech, responsive web application designed to empower job seekers by analyzing resumes against Job Descriptions (JD) in real-time. Features an interactive dual-mode editor, ATS compliance checker, design template customizer, keyword frequency analyzer, and an AI-driven Interview Copilot.
+A state-of-the-art, high-tech, responsive web application designed to empower job seekers by analyzing resumes against Job Descriptions (JD) in real-time. Features an interactive dual-mode editor, ATS compliance checker, design template customizer, keyword frequency analyzer, and an AI-driven Career Suite.
 
 ---
 
-## ✨ Key Features & Capabilties
+## ✨ Key Features & Capabilities
 
 ### 📊 ATS Compliance Audit & Score Dial
 - **Live Vector Match Rate:** Get immediate, detailed scoring on how well your resume matches the target job spec.
 - **Biometric Ring Dial:** Features a glowing, rotating, and pulsing circle dial showcasing your ATS score.
-- **Actionable Insights:** Recieve line-by-line recommendations for layout fixes, styling improvements, and core credential alignments.
+- **Actionable Insights:** Receive line-by-line recommendations for layout fixes, styling improvements, and core credential alignments.
 
 ### 📋 Dual-Mode Workspace Editor
 - **Visual Form Wizard:** Edit your resume details (experiences list, educational history, credentials, skills list) in an intuitive form-based interface.
 - **Markdown Editor:** Toggle to a raw Markdown text-area for fast copy-pasting, custom formatting, and deep edits.
 - **Bi-directional Sync:** Form Wizard state and Markdown code automatically compile and parse into one another in real-time.
 
+### 🤖 Interactive Mock Interview Simulator
+- **Dual-Mode Preparator:** Toggle between a structured behavior-based `QUESTION_BANK` and an interactive `AI_MOCK_SIMULATOR`.
+- **Recruiter Chat Interface:** Gemini simulates a live recruiter asking situational interview questions based on the gaps identified between your resume and the Job Description.
+- **Real-Time Evaluation:** Submitting answers scores them (out of 10) on compliance with the **STAR Method** (Situation, Task, Action, Result) with recruiter feedback.
+- **Performance Scorecard:** End the session to receive your average score, strengths, and recommendations.
+
+### ⚡ One-Click AI Resume Tailoring
+- **Summary Optimizer:** Use AI to refine and re-align your executive summary targeting the Job Description keywords in one click.
+- **Experience Bullets Optimizer:** Polish individual professional role bullet points, embedding high-value ATS keyword alignments and impact-focused metrics.
+- **API Status Goggles:** Visual loaders (`TAILORING...`) give real-time feedback during optimization cycles.
+
 ### 💼 Multi-Layout Printable Templates
 - **Classic Executive:** Elegant, professional centered layouts.
 - **Modern Two-Column:** High-impact sidebar structure splitting profile details and experiences.
 - **Creative Minimalist:** Accent-colored minimalist aesthetic for designers and modern job roles.
+- **Tech Elite (New):** Sleek, developer-centric layout featuring clean typography separators, inline markers, and monospace accent styles.
+- **Dynamic Section Ordering:** Drag-and-drop style `SECTION_ORDER` controls allowing you to rearrange, promote, or swap sections instantly.
 - **Design Controls:** Control Accent Colors, Fonts (Outfit, Georgia, Mono), Font sizes, margin spacings, and line heights.
 - **One-click Export:** High-quality PDF export target using `html2pdf.js`.
-
-### 🧠 AI Interview Preparation Copilot
-- **Behavioral Questions:** Generates situational questions based on the gaps identified between your resume and Job Description.
-- **Rationale & Tips:** Includes an explanation of why the question is asked and tips using the **STAR Method** (Situation, Task, Action, Result).
 
 ---
 
