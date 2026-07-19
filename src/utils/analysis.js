@@ -247,7 +247,7 @@ export const getKeywordDensity = (resumeText = '', jobDescription = '') => {
   
   const cleanAndTokenize = (txt) => {
     return txt.toLowerCase()
-      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g, " ")
+      .replace(/[.,/#!$%^&*;:{}=\-_`~()?"']/g, " ")
       .split(/\s+/)
       .filter(w => w.length > 2);
   };
@@ -354,5 +354,148 @@ export const getInterviewPrepQuestions = async (resumeText, jobDescription, apiK
   const cleaned = rawText.replace(/```json/i, '').replace(/```/g, '').trim();
   return JSON.parse(cleaned);
 };
+
+export const evaluateInterviewResponse = async (question, answer, resumeText, jdText, apiKey, modelName = 'gemini-2.5-flash') => {
+  if (!apiKey) {
+    // Offline/mock feedback engine
+    const words = answer.toLowerCase().split(/\s+/).filter(Boolean);
+    const starIndicators = ['because', 'result', 'metric', 'impact', 'achieved', 'situation', 'task', 'action', 'lead', 'managed', 'percent', '%', 'team'];
+    const matchingIndicators = starIndicators.filter(w => words.includes(w) || answer.toLowerCase().includes(w));
+    
+    let score = 5.0;
+    let feedback = "";
+    
+    if (words.length < 15) {
+      score = 4.0;
+      feedback = "Your answer is quite brief. A strong interview response should detail the context (Situation & Task), your specific actions, and the concrete results (STAR method). Expand more on what you did and the outcomes.";
+    } else {
+      score = Math.min(5.0 + (matchingIndicators.length * 0.8) + (words.length * 0.01), 9.5);
+      score = Math.round(score * 10) / 10;
+      
+      feedback = `Good effort! You structured your response with about ${words.length} words. `;
+      if (matchingIndicators.includes('percent') || matchingIndicators.includes('%') || matchingIndicators.includes('result')) {
+        feedback += "Great job including measurable results and impact. ";
+      } else {
+        feedback += "To improve, try to explicitly quantify your achievements (e.g. 'improved performance by 20%'). ";
+      }
+      
+      if (matchingIndicators.includes('action') || matchingIndicators.includes('lead') || matchingIndicators.includes('managed')) {
+        feedback += "You described your actions clearly. ";
+      } else {
+        feedback += "Focus more on highlighting your personal contribution using strong action verbs ('I spearheaded', 'I optimized'). ";
+      }
+    }
+    
+    return {
+      score,
+      feedback
+    };
+  }
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  const prompt = `You are an expert technical recruiter and interview coach. Evaluate the candidate's response to the interview question below.
+  
+  Job Description:
+  "${jdText}"
+  
+  Resume:
+  "${resumeText}"
+  
+  Question asked:
+  "${question}"
+  
+  Candidate's Answer:
+  "${answer}"
+  
+  Evaluate the answer based on:
+  1. STAR Method structure (Situation, Task, Action, Result).
+  2. Technical alignment with the Job Description.
+  3. Action verbs and quantification of metrics.
+  
+  Provide constructive feedback, highlighting what they did well, what could be improved, and a score from 0.0 to 10.0 (one decimal place).
+  
+  Provide your response strictly in the following JSON format:
+  {
+    "score": (float, e.g. 7.8),
+    "feedback": "Detailed constructive coaching feedback (2-3 sentences max)"
+  }`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      contents: [{
+        parts: [{ text: prompt }]
+      }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'object',
+          properties: {
+            score: { type: 'number' },
+            feedback: { type: 'string' }
+          },
+          required: ['score', 'feedback']
+        }
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API Error: ${response.status}`);
+  }
+
+  const resData = await response.json();
+  return JSON.parse(resData.candidates[0].content.parts[0].text);
+};
+
+export const tailorResumeSummary = async (summary, jdText, apiKey, modelName = 'gemini-2.5-flash') => {
+  if (!apiKey) {
+    return `${summary} (Tailored for ATS keyword alignment, specializing in core stack integration, performance optimizations, and agile methodologies.)`;
+  }
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  const prompt = `You are a resume writing expert. Rewrite the following professional summary to optimize it for ATS systems matching this Job Description. Keep the length similar (2-4 sentences) and maintain honesty, but align the phrasing and highlight matching skills. Return ONLY the rewritten summary without quotes or introduction.
+  
+  Summary: "${summary}"
+  Job Description: "${jdText}"`;
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+  });
+  if (!response.ok) throw new Error("Tailoring failed");
+  const data = await response.json();
+  return data.candidates[0].content.parts[0].text.trim();
+};
+
+export const tailorResumeExperience = async (role, company, bulletPoints, jdText, apiKey, modelName = 'gemini-2.5-flash') => {
+  if (!apiKey) {
+    return bulletPoints.split('\n').map(line => {
+      if (!line.trim()) return '';
+      return `${line} - leveraged key practices to optimize workflows and scale project delivery.`;
+    }).join('\n');
+  }
+  const url = `https://genergenerativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`; // note: fixing API URL typo
+  const correctedUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+  const prompt = `You are an expert resume writer. Rewrite the bullet points for the role "${role} at ${company}" to make them highly impactful (using STAR method) and optimized for this Job Description. Maintain the same general facts but use stronger action verbs and align with JD requirements. Return ONLY the rewritten bullet points, one per line (start each line with a dash '-').
+  
+  Bullet Points:
+  "${bulletPoints}"
+  Job Description:
+  "${jdText}"`;
+
+  const response = await fetch(correctedUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+  });
+  if (!response.ok) throw new Error("Tailoring failed");
+  const data = await response.json();
+  return data.candidates[0].content.parts[0].text.trim();
+};
+
 
 

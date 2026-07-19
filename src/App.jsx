@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+// eslint-disable-next-line no-unused-vars
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { 
   FileText, 
@@ -54,7 +55,10 @@ import {
   checkAtsCompliance,
   revampBulletPoint,
   getKeywordDensity,
-  getInterviewPrepQuestions
+  getInterviewPrepQuestions,
+  evaluateInterviewResponse,
+  tailorResumeSummary,
+  tailorResumeExperience
 } from './utils/analysis';
 
 // PDF.js configuration
@@ -73,7 +77,7 @@ const SpotlightCard = ({ children, className = "", style = {} }) => {
   const rotateY = useSpring(useTransform(mouseX, [0, 400], [-6, 6]), { damping: 25, stiffness: 200 });
 
   function handleMouseMove({ currentTarget, clientX, clientY }) {
-    let { left, top, width, height } = currentTarget.getBoundingClientRect();
+    let { left, top } = currentTarget.getBoundingClientRect();
     const x = clientX - left;
     const y = clientY - top;
     mouseX.set(x);
@@ -125,17 +129,10 @@ const MeshBackground = () => (
   </div>
 );
 
-const SettingsModal = ({ isOpen, onClose, apiKey, setApiKey, selectedModel, setSelectedModel }) => {
+const SettingsModal = ({ onClose, apiKey, setApiKey, selectedModel, setSelectedModel }) => {
   const [showKey, setShowKey] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [tempModel, setTempModel] = useState(selectedModel);
-
-  useEffect(() => {
-    if (isOpen) {
-      setTempKey(apiKey);
-      setTempModel(selectedModel);
-    }
-  }, [isOpen, apiKey, selectedModel]);
 
   const handleSave = () => {
     setApiKey(tempKey);
@@ -146,72 +143,74 @@ const SettingsModal = ({ isOpen, onClose, apiKey, setApiKey, selectedModel, setS
   };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="modal-overlay" onClick={onClose}>
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 350 }}
-            className="modal-card" 
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <Brain size={24} color="var(--accent-primary)" />
-                <h3 style={{ fontSize: '1.25rem', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>ENGINE_CONFIGURATION</h3>
-              </div>
-              <button className="modal-close" onClick={onClose}><X size={20} /></button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2.5rem' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>GEMINI_API_KEY</label>
-                <div style={{ position: 'relative' }}>
-                  <input 
-                    type={showKey ? 'text' : 'password'}
-                    placeholder="Enter your Gemini API key..."
-                    value={tempKey}
-                    onChange={(e) => setTempKey(e.target.value)}
-                    className="settings-input"
-                    style={{ paddingRight: '3rem' }}
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowKey(!showKey)}
-                    style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                  >
-                    {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-                  <Info size={12} /> Get a free API key from <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-secondary)', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>Google AI Studio <ExternalLink size={10} /></a>.
-                </span>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>SELECTED_MODEL</label>
-                <select 
-                  value={tempModel} 
-                  onChange={(e) => setTempModel(e.target.value)}
-                  className="settings-input"
-                >
-                  <option value="gemini-2.5-flash">gemini-2.5-flash (Fast & Optimized)</option>
-                  <option value="gemini-2.5-pro">gemini-2.5-pro (Deep & Analytical)</option>
-                  <option value="gemini-1.5-flash">gemini-1.5-flash (Legacy)</option>
-                </select>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-              <button className="btn-secondary" onClick={onClose}>CANCEL</button>
-              <button className="btn-primary-small" onClick={handleSave}>SAVE_CHANGES</button>
-            </div>
-          </motion.div>
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="modal-overlay" 
+      onClick={onClose}
+    >
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+        className="modal-card" 
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Brain size={24} color="var(--accent-primary)" />
+            <h3 style={{ fontSize: '1.25rem', fontFamily: 'var(--font-mono)', fontWeight: 600 }}>ENGINE_CONFIGURATION</h3>
+          </div>
+          <button className="modal-close" onClick={onClose}><X size={20} /></button>
         </div>
-      )}
-    </AnimatePresence>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginBottom: '2.5rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>GEMINI_API_KEY</label>
+            <div style={{ position: 'relative' }}>
+              <input 
+                type={showKey ? 'text' : 'password'}
+                placeholder="Enter your Gemini API key..."
+                value={tempKey}
+                onChange={(e) => setTempKey(e.target.value)}
+                className="settings-input"
+                style={{ paddingRight: '3rem' }}
+              />
+              <button 
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
+              >
+                {showKey ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
+              <Info size={12} /> Get a free API key from <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-secondary)', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}>Google AI Studio <ExternalLink size={10} /></a>.
+            </span>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.8rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>SELECTED_MODEL</label>
+            <select 
+              value={tempModel} 
+              onChange={(e) => setTempModel(e.target.value)}
+              className="settings-input"
+            >
+              <option value="gemini-2.5-flash">gemini-2.5-flash (Fast & Optimized)</option>
+              <option value="gemini-2.5-pro">gemini-2.5-pro (Deep & Analytical)</option>
+              <option value="gemini-1.5-flash">gemini-1.5-flash (Legacy)</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+          <button className="btn-secondary" onClick={onClose}>CANCEL</button>
+          <button className="btn-primary-small" onClick={handleSave}>SAVE_CHANGES</button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
@@ -309,7 +308,6 @@ const parseMarkdownToData = (md) => {
   const lines = md.split('\n');
   let currentSection = '';
   let currentExp = null;
-  let headerSet = false;
   
   lines.forEach((line, i) => {
     const trimmed = line.trim();
@@ -317,7 +315,6 @@ const parseMarkdownToData = (md) => {
     
     if (i === 0 && trimmed.startsWith('# ')) {
       data.name = trimmed.replace('#', '').trim();
-      headerSet = true;
       return;
     }
     
@@ -432,11 +429,18 @@ function App() {
   const [templateMargin, setTemplateMargin] = useState('balanced'); // 'narrow', 'balanced', 'wide'
   
   // --- ADDITIONAL NEXT-LEVEL STATES ---
-  const [templateLayout, setTemplateLayout] = useState('classic'); // 'classic', 'modern', 'creative'
+  const [templateLayout, setTemplateLayout] = useState('classic'); // 'classic', 'modern', 'creative', 'tech_elite'
   const [isFormWizard, setIsFormWizard] = useState(false);
   const [interviewQuestions, setInterviewQuestions] = useState([]);
   const [loadingStep, setLoadingStep] = useState(0);
   const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
+  const [interviewMode, setInterviewMode] = useState('questions'); // 'questions', 'simulator'
+  const [chatMessages, setChatMessages] = useState([]);
+  const [currentChatIndex, setCurrentChatIndex] = useState(0); // 0 = ready, 1, 2, 3 = active Qs, 4 = finished
+  const [userChatInput, setUserChatInput] = useState('');
+  const [isSendingChatMessage, setIsSendingChatMessage] = useState(false);
+  const [sectionOrder, setSectionOrder] = useState(['summary', 'experience', 'education', 'skills']);
+  const [tailoringStatus, setTailoringStatus] = useState({ summary: false, experiences: {} });
   const [resumeData, setResumeData] = useState({
     name: '',
     title: '',
@@ -453,6 +457,163 @@ function App() {
   const fileInputRef = useRef(null);
   const resumePrintRef = useRef(null);
 
+  const moveSection = (index, direction) => {
+    const newOrder = [...sectionOrder];
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= newOrder.length) return;
+    const temp = newOrder[index];
+    newOrder[index] = newOrder[targetIndex];
+    newOrder[targetIndex] = temp;
+    setSectionOrder(newOrder);
+  };
+
+  const handleTailorSummary = async () => {
+    if (!resumeData.summary) return;
+    setTailoringStatus(prev => ({ ...prev, summary: true }));
+    try {
+      const tailored = await tailorResumeSummary(resumeData.summary, jobDescription, apiKey, selectedModel);
+      setResumeData(prev => ({ ...prev, summary: tailored }));
+    } catch (err) {
+      console.error(err);
+      alert("Failed to tailor summary. Please check your API key.");
+    } finally {
+      setTailoringStatus(prev => ({ ...prev, summary: false }));
+    }
+  };
+
+  const handleTailorExperience = async (index) => {
+    const exp = resumeData.experiences[index];
+    if (!exp || !exp.bulletPoints) return;
+    setTailoringStatus(prev => ({ 
+      ...prev, 
+      experiences: { ...prev.experiences, [index]: true } 
+    }));
+    try {
+      const tailored = await tailorResumeExperience(exp.role, exp.company, exp.bulletPoints, jobDescription, apiKey, selectedModel);
+      updateExperience(index, 'bulletPoints', tailored);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to tailor experience bullets. Please check your API key.");
+    } finally {
+      setTailoringStatus(prev => ({ 
+        ...prev, 
+        experiences: { ...prev.experiences, [index]: false } 
+      }));
+    }
+  };
+
+  const startMockInterview = async () => {
+    let activeQs = interviewQuestions;
+    if (!activeQs || activeQs.length === 0) {
+      setIsGeneratingQuestions(true);
+      try {
+        const questions = await getInterviewPrepQuestions(editedResume, jobDescription, apiKey, selectedModel);
+        setInterviewQuestions(questions);
+        activeQs = questions;
+      } catch (err) {
+        console.error(err);
+        alert("Failed to generate questions. Please ensure Job Description and Resume are loaded.");
+        return;
+      } finally {
+        setIsGeneratingQuestions(false);
+      }
+    }
+    
+    if (activeQs && activeQs.length > 0) {
+      setCurrentChatIndex(1);
+      setChatMessages([
+        {
+          sender: 'ai',
+          text: `Welcome to your AI Mock Interview! I have analyzed your resume against the Job Description. Let's start with Question 1:\n\n**${activeQs[0].question}**`,
+          question: activeQs[0].question
+        }
+      ]);
+      setUserChatInput('');
+    } else {
+      alert("Could not generate interview questions.");
+    }
+  };
+
+  const handleSendResponse = async () => {
+    if (!userChatInput.trim()) return;
+    const answer = userChatInput.trim();
+    
+    // Find current active question
+    const aiMsgs = chatMessages.filter(m => m.sender === 'ai');
+    const currentQ = aiMsgs[aiMsgs.length - 1]?.question || (interviewQuestions && interviewQuestions[currentChatIndex - 1]?.question);
+    
+    if (!currentQ) {
+      alert("Error finding the current question.");
+      return;
+    }
+    
+    // Add user message
+    const updatedMessages = [...chatMessages, { sender: 'user', text: answer }];
+    setChatMessages(updatedMessages);
+    setUserChatInput('');
+    setIsSendingChatMessage(true);
+    
+    try {
+      // Evaluate response
+      const evalResult = await evaluateInterviewResponse(
+        currentQ,
+        answer,
+        editedResume,
+        jobDescription,
+        apiKey,
+        selectedModel
+      );
+      
+      // Add feedback message
+      const nextIndex = currentChatIndex + 1;
+      let aiText = `**Score: ${evalResult.score}/10**\n\n**Recruiter Feedback:** ${evalResult.feedback}`;
+      let nextQ = "";
+      
+      // We also want to record this score on the ai message object
+      const newAiMsg = {
+        sender: 'ai',
+        text: '',
+        score: evalResult.score,
+        feedback: evalResult.feedback
+      };
+      
+      if (nextIndex <= 3 && interviewQuestions[nextIndex - 1]) {
+        nextQ = interviewQuestions[nextIndex - 1].question;
+        aiText += `\n\nLet's move to Question ${nextIndex}:\n\n**${nextQ}**`;
+        setCurrentChatIndex(nextIndex);
+        newAiMsg.text = aiText;
+        newAiMsg.question = nextQ;
+        setChatMessages(prev => [...prev, newAiMsg]);
+      } else {
+        // Complete interview
+        // Gather all previous scores from state + this score
+        const prevScores = chatMessages
+          .filter(m => m.sender === 'ai' && m.score !== undefined)
+          .map(m => m.score);
+        const allScores = [...prevScores, evalResult.score];
+        
+        const avgScore = allScores.length > 0 
+          ? Math.round((allScores.reduce((a, b) => a + b, 0) / allScores.length) * 10) / 10
+          : evalResult.score;
+          
+        aiText += `\n\n**Mock Interview Complete!**\n\n**Overall Performance: ${avgScore}/10**\n\nRecommendations:\n- Structure details with Situation-Task-Action-Result.\n- Include direct KPIs and percentage improvements.`;
+        setCurrentChatIndex(4); // complete
+        newAiMsg.text = aiText;
+        newAiMsg.isFinal = true;
+        newAiMsg.avgScore = avgScore;
+        setChatMessages(prev => [...prev, newAiMsg]);
+      }
+    } catch (err) {
+      console.error(err);
+      setChatMessages(prev => [...prev, { 
+        sender: 'ai', 
+        text: "Sorry, I encountered an error evaluating your response. Please try submitting again." 
+      }]);
+    } finally {
+      setIsSendingChatMessage(false);
+    }
+  };
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('theme', theme);
@@ -464,7 +625,7 @@ function App() {
       const compiled = compileDataToMarkdown(resumeData);
       setEditedResume(compiled);
     }
-  }, [resumeData, isFormWizard]);
+  }, [resumeData, isFormWizard, results]);
 
   const extractTextFromPdf = async (file) => {
     setIsParsing(true);
@@ -480,6 +641,7 @@ function App() {
       setResume(fullText);
       setUploadedFile(file);
     } catch (error) {
+      console.error(error);
       alert('PDF Analysis Interrupted. System Error.');
     } finally {
       setIsParsing(false);
@@ -827,32 +989,101 @@ function App() {
       );
     }
 
-    // Classic Layout
-    return (
-      <div style={containerStyle}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ fontSize: '2.2rem', color: '#111827', fontWeight: 800, margin: 0, borderBottom: 'none' }}>{resumeData.name || 'Your Name'}</h1>
-          {resumeData.title && <p style={{ color: templateAccent, fontSize: '1rem', fontWeight: 600, marginTop: '0.25rem' }}>{resumeData.title}</p>}
-          <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '0.75rem', fontSize: '0.8rem', color: '#475569', marginTop: '0.5rem' }}>
-            {resumeData.email && <span>{resumeData.email}</span>}
-            {resumeData.email && (resumeData.phone || resumeData.linkedin || resumeData.location) && <span>•</span>}
-            {resumeData.phone && <span>{resumeData.phone}</span>}
-            {resumeData.phone && (resumeData.linkedin || resumeData.location) && <span>•</span>}
-            {resumeData.linkedin && <span>{resumeData.linkedin}</span>}
-            {resumeData.linkedin && resumeData.location && <span>•</span>}
-            {resumeData.location && <span>{resumeData.location}</span>}
-          </div>
-        </div>
+    if (templateLayout === 'tech_elite') {
+      const renderTechSection = (sectionId) => {
+        if (sectionId === 'summary' && resumeData.summary) {
+          return (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: templateAccent, textTransform: 'uppercase', letterSpacing: '0.08em', borderLeft: `4px solid ${templateAccent}`, paddingLeft: '0.75rem', marginBottom: '0.75rem' }}>Summary</h3>
+              <p style={{ color: '#374151', fontSize: '0.85rem', margin: 0, paddingLeft: '1rem' }}>{resumeData.summary}</p>
+            </div>
+          );
+        }
+        if (sectionId === 'experience' && resumeData.experiences && resumeData.experiences.length > 0) {
+          return (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: templateAccent, textTransform: 'uppercase', letterSpacing: '0.08em', borderLeft: `4px solid ${templateAccent}`, paddingLeft: '0.75rem', marginBottom: '1rem' }}>Experience</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingLeft: '1rem' }}>
+                {resumeData.experiences.map((exp, idx) => (
+                  <div key={idx}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
+                      <h4 style={{ fontWeight: 700, color: '#111827', fontSize: '0.9rem', margin: 0 }}>{exp.role} <span style={{ fontWeight: 400, color: '#4b5563' }}>// {exp.company}</span></h4>
+                      <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 600, fontFamily: 'var(--font-mono)' }}>{exp.duration}</span>
+                    </div>
+                    {renderBullets(exp.bulletPoints)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        if (sectionId === 'education' && resumeData.education && resumeData.education.length > 0) {
+          return (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: templateAccent, textTransform: 'uppercase', letterSpacing: '0.08em', borderLeft: `4px solid ${templateAccent}`, paddingLeft: '0.75rem', marginBottom: '1rem' }}>Education</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', paddingLeft: '1rem' }}>
+                {resumeData.education.map((edu, idx) => (
+                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                    <div>
+                      <h4 style={{ fontWeight: 700, color: '#111827', fontSize: '0.85rem', margin: 0 }}>{edu.degree}</h4>
+                      <span style={{ fontSize: '0.75rem', color: '#4b5563', fontStyle: 'italic' }}>{edu.school}</span>
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: '#6b7280', fontFamily: 'var(--font-mono)' }}>{edu.year}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        if (sectionId === 'skills' && resumeData.skills) {
+          return (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: templateAccent, textTransform: 'uppercase', letterSpacing: '0.08em', borderLeft: `4px solid ${templateAccent}`, paddingLeft: '0.75rem', marginBottom: '0.75rem' }}>Skills</h3>
+              <div style={{ paddingLeft: '1rem' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {resumeData.skills.split(',').map(s => s.trim()).filter(Boolean).map(skill => (
+                    <span key={skill} style={{ fontSize: '0.75rem', padding: '0.2rem 0.5rem', background: '#f3f4f6', color: '#1f2937', borderRadius: '4px', border: '1px solid #e5e7eb', fontFamily: 'var(--font-mono)' }}>
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        }
+        return null;
+      };
 
-        {resumeData.summary && (
+      return (
+        <div style={containerStyle}>
+          <div style={{ borderBottom: `2px solid ${templateAccent}22`, paddingBottom: '1.5rem', marginBottom: '2rem' }}>
+            <h1 style={{ fontSize: '2.2rem', color: '#111827', fontWeight: 800, margin: 0, borderBottom: 'none' }}>{resumeData.name || 'Your Name'}</h1>
+            {resumeData.title && <p style={{ color: templateAccent, fontSize: '0.95rem', fontWeight: 600, marginTop: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{resumeData.title}</p>}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', fontSize: '0.75rem', color: '#4b5563', marginTop: '0.5rem', fontFamily: 'var(--font-mono)' }}>
+              {resumeData.email && <span>email: {resumeData.email}</span>}
+              {resumeData.phone && <span>phone: {resumeData.phone}</span>}
+              {resumeData.linkedin && <span>linkedin: {resumeData.linkedin}</span>}
+              {resumeData.location && <span>loc: {resumeData.location}</span>}
+            </div>
+          </div>
+          {sectionOrder.map(secId => renderTechSection(secId))}
+        </div>
+      );
+    }
+
+    // Classic Layout
+    const renderClassicSection = (sectionId) => {
+      if (sectionId === 'summary' && resumeData.summary) {
+        return (
           <div style={{ marginBottom: '1.5rem' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: templateAccent, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Summary</h3>
             <hr style={hrStyle} />
             <p style={{ color: '#374151', fontSize: '0.9rem' }}>{resumeData.summary}</p>
           </div>
-        )}
-
-        {resumeData.experiences && resumeData.experiences.length > 0 && (
+        );
+      }
+      if (sectionId === 'experience' && resumeData.experiences && resumeData.experiences.length > 0) {
+        return (
           <div style={{ marginBottom: '1.5rem' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: templateAccent, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Experience</h3>
             <hr style={hrStyle} />
@@ -868,9 +1099,10 @@ function App() {
               ))}
             </div>
           </div>
-        )}
-
-        {resumeData.education && resumeData.education.length > 0 && (
+        );
+      }
+      if (sectionId === 'education' && resumeData.education && resumeData.education.length > 0) {
+        return (
           <div style={{ marginBottom: '1.5rem' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: templateAccent, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Education</h3>
             <hr style={hrStyle} />
@@ -886,15 +1118,36 @@ function App() {
               ))}
             </div>
           </div>
-        )}
-
-        {resumeData.skills && (
-          <div>
+        );
+      }
+      if (sectionId === 'skills' && resumeData.skills) {
+        return (
+          <div style={{ marginBottom: '1.5rem' }}>
             <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: templateAccent, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Skills</h3>
             <hr style={hrStyle} />
             <p style={{ color: '#374151', fontSize: '0.9rem' }}>{resumeData.skills}</p>
           </div>
-        )}
+        );
+      }
+      return null;
+    };
+
+    return (
+      <div style={containerStyle}>
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <h1 style={{ fontSize: '2.2rem', color: '#111827', fontWeight: 800, margin: 0, borderBottom: 'none' }}>{resumeData.name || 'Your Name'}</h1>
+          {resumeData.title && <p style={{ color: templateAccent, fontSize: '1rem', fontWeight: 600, marginTop: '0.25rem' }}>{resumeData.title}</p>}
+          <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '0.75rem', fontSize: '0.8rem', color: '#475569', marginTop: '0.5rem' }}>
+            {resumeData.email && <span>{resumeData.email}</span>}
+            {resumeData.email && (resumeData.phone || resumeData.linkedin || resumeData.location) && <span>•</span>}
+            {resumeData.phone && <span>{resumeData.phone}</span>}
+            {resumeData.phone && (resumeData.linkedin || resumeData.location) && <span>•</span>}
+            {resumeData.linkedin && <span>{resumeData.linkedin}</span>}
+            {resumeData.linkedin && resumeData.location && <span>•</span>}
+            {resumeData.location && <span>{resumeData.location}</span>}
+          </div>
+        </div>
+        {sectionOrder.map(secId => renderClassicSection(secId))}
       </div>
     );
   };
@@ -903,14 +1156,17 @@ function App() {
     <div style={{ minHeight: '100vh' }}>
       <MeshBackground />
       
-      <SettingsModal 
-        isOpen={isSettingsOpen} 
-        onClose={() => setIsSettingsOpen(false)} 
-        apiKey={apiKey} 
-        setApiKey={setApiKey} 
-        selectedModel={selectedModel} 
-        setSelectedModel={setSelectedModel} 
-      />
+      <AnimatePresence>
+        {isSettingsOpen && (
+          <SettingsModal 
+            onClose={() => setIsSettingsOpen(false)} 
+            apiKey={apiKey} 
+            setApiKey={setApiKey} 
+            selectedModel={selectedModel} 
+            setSelectedModel={setSelectedModel} 
+          />
+        )}
+      </AnimatePresence>
 
       <div className="container">
         {/* HUD Elements */}
@@ -1556,7 +1812,25 @@ function App() {
                             </div>
 
                             <div>
-                              <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>SUMMARY</label>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                                <label style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', margin: 0 }}>SUMMARY</label>
+                                <button 
+                                  onClick={handleTailorSummary}
+                                  disabled={tailoringStatus.summary || !resumeData.summary}
+                                  className="btn-secondary" 
+                                  style={{ padding: '0.2rem 0.5rem', fontSize: '0.6rem', height: 'auto', display: 'flex', alignItems: 'center', gap: '0.25rem', border: '1px solid rgba(99, 102, 241, 0.3)', color: 'var(--accent-primary)', cursor: 'pointer' }}
+                                >
+                                  {tailoringStatus.summary ? (
+                                    <>
+                                      <RefreshCw size={10} style={{ animation: 'spin 1s linear infinite' }} /> TAILORING...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Sparkles size={10} /> AI_TAILOR
+                                    </>
+                                  )}
+                                </button>
+                              </div>
                               <textarea 
                                 rows={4}
                                 value={resumeData.summary}
@@ -1603,6 +1877,25 @@ function App() {
                                       onChange={(e) => updateExperience(idx, 'duration', e.target.value)}
                                       style={{ padding: '0.5rem', width: '100%', marginBottom: '0.5rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.8rem' }}
                                     />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0.5rem 0 0.25rem 0' }}>
+                                      <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>BULLET_POINTS</span>
+                                      <button 
+                                        onClick={() => handleTailorExperience(idx)}
+                                        disabled={tailoringStatus.experiences?.[idx] || !exp.bulletPoints}
+                                        className="btn-secondary" 
+                                        style={{ padding: '0.2rem 0.5rem', fontSize: '0.6rem', height: 'auto', display: 'flex', alignItems: 'center', gap: '0.25rem', border: '1px solid rgba(99, 102, 241, 0.3)', color: 'var(--accent-primary)', cursor: 'pointer' }}
+                                      >
+                                        {tailoringStatus.experiences?.[idx] ? (
+                                          <>
+                                            <RefreshCw size={10} style={{ animation: 'spin 1s linear infinite' }} /> TAILORING...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Sparkles size={10} /> AI_TAILOR
+                                          </>
+                                        )}
+                                      </button>
+                                    </div>
                                     <textarea 
                                       rows={3} 
                                       placeholder="Bullet points (one per line)" 
@@ -1679,7 +1972,9 @@ function App() {
                               try {
                                 const parsed = parseMarkdownToData(e.target.value);
                                 setResumeData(parsed);
-                              } catch(err){}
+                              } catch {
+                                // Ignore temporary parsing errors while typing
+                              }
                             }}
                             placeholder="Your optimized markdown resume starts here..."
                           />
@@ -1735,10 +2030,41 @@ function App() {
                           {/* Layout Template presets */}
                           <div className="customizer-section">
                             <span className="customizer-section-title">LAYOUT_TEMPLATE</span>
-                            <div className="selector-grid" style={{ gridTemplateColumns: '1fr', gap: '0.5rem' }}>
-                              <button className={`selector-btn ${templateLayout === 'classic' ? 'active' : ''}`} onClick={() => setTemplateLayout('classic')}>Classic Executive</button>
-                              <button className={`selector-btn ${templateLayout === 'modern' ? 'active' : ''}`} onClick={() => setTemplateLayout('modern')}>Modern Two-Column</button>
-                              <button className={`selector-btn ${templateLayout === 'creative' ? 'active' : ''}`} onClick={() => setTemplateLayout('creative')}>Creative Minimalist</button>
+                            <div className="selector-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                              <button className={`selector-btn ${templateLayout === 'classic' ? 'active' : ''}`} onClick={() => setTemplateLayout('classic')}>Classic</button>
+                              <button className={`selector-btn ${templateLayout === 'modern' ? 'active' : ''}`} onClick={() => setTemplateLayout('modern')}>Modern</button>
+                              <button className={`selector-btn ${templateLayout === 'creative' ? 'active' : ''}`} onClick={() => setTemplateLayout('creative')}>Creative</button>
+                              <button className={`selector-btn ${templateLayout === 'tech_elite' ? 'active' : ''}`} onClick={() => setTemplateLayout('tech_elite')}>Tech Elite</button>
+                            </div>
+                          </div>
+
+                          {/* Section Reordering */}
+                          <div className="customizer-section">
+                            <span className="customizer-section-title">SECTION_ORDER</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', marginTop: '0.25rem' }}>
+                              {sectionOrder.map((sec, idx) => (
+                                <div key={sec} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                                  <span style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--text-primary)' }}>
+                                    {sec.toUpperCase()}
+                                  </span>
+                                  <div style={{ display: 'flex', gap: '0.2rem' }}>
+                                    <button 
+                                      disabled={idx === 0} 
+                                      onClick={() => moveSection(idx, -1)} 
+                                      style={{ padding: '0.15rem 0.35rem', fontSize: '0.6rem', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+                                    >
+                                      ▲
+                                    </button>
+                                    <button 
+                                      disabled={idx === sectionOrder.length - 1} 
+                                      onClick={() => moveSection(idx, 1)} 
+                                      style={{ padding: '0.15rem 0.35rem', fontSize: '0.6rem', background: 'rgba(255,255,255,0.05)', border: 'none', color: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+                                    >
+                                      ▼
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
 
@@ -1852,69 +2178,224 @@ function App() {
                             <Brain size={22} color="var(--accent-primary)" /> INTERVIEW_PREPARATION_COPILOT
                           </h3>
                           <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                            AI generated situational interview questions based on the gaps identified between your resume and Job Description.
+                            Prepare for your upcoming interview using AI-driven situational simulator or standard question maps.
                           </p>
                         </div>
-                        <button 
-                          onClick={() => handleFetchInterviewQuestions(editedResume, jobDescription)} 
-                          className="btn-primary-small"
-                          disabled={isGeneratingQuestions}
-                          style={{ background: 'var(--accent-primary)', border: 'none', color: '#fff', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                        >
-                          {isGeneratingQuestions ? (
-                            <>
-                              <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> REGENERATING...
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw size={14} /> RE-GENERATE
-                            </>
-                          )}
-                        </button>
+                        
+                        {/* MODE SELECTOR */}
+                        <div style={{ display: 'flex', gap: '0.5rem', background: 'rgba(255,255,255,0.05)', padding: '0.25rem', borderRadius: '6px' }}>
+                          <button 
+                            className={`hud-button ${interviewMode === 'questions' ? 'active' : ''}`} 
+                            onClick={() => setInterviewMode('questions')}
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.7rem', height: 'auto', border: 'none', background: interviewMode === 'questions' ? 'var(--accent-primary)' : 'transparent', color: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+                          >
+                            QUESTION_BANK
+                          </button>
+                          <button 
+                            className={`hud-button ${interviewMode === 'simulator' ? 'active' : ''}`} 
+                            onClick={() => setInterviewMode('simulator')}
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.7rem', height: 'auto', border: 'none', background: interviewMode === 'simulator' ? 'var(--accent-primary)' : 'transparent', color: '#fff', borderRadius: '4px', cursor: 'pointer' }}
+                          >
+                            AI_MOCK_SIMULATOR
+                          </button>
+                        </div>
                       </div>
 
-                      {isGeneratingQuestions ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6rem' }}>
-                          <RefreshCw size={32} style={{ animation: 'spin 2s linear infinite', color: 'var(--accent-primary)' }} />
-                          <p style={{ marginTop: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>CREATING_INTERVIEW_MAP...</p>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                          {interviewQuestions && interviewQuestions.length > 0 ? (
-                            interviewQuestions.map((q, idx) => (
-                              <SpotlightCard key={idx} style={{ padding: '2.5rem' }}>
-                                <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                                  <div style={{ background: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent-primary)', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0 }}>
-                                    {idx + 1}
-                                  </div>
-                                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                                    <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: '1.4' }}>
-                                      {q.question}
-                                    </h4>
-                                    
-                                    <div style={{ borderLeft: '3px solid rgba(255,255,255,0.08)', paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                      <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)', fontWeight: 600 }}>RATIONALE</span>
-                                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                                        {q.rationale}
-                                      </p>
-                                    </div>
+                      {interviewMode === 'questions' ? (
+                        <>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button 
+                              onClick={() => handleFetchInterviewQuestions(editedResume, jobDescription)} 
+                              className="btn-primary-small"
+                              disabled={isGeneratingQuestions}
+                              style={{ background: 'var(--accent-primary)', border: 'none', color: '#fff', padding: '0.75rem 1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                            >
+                              {isGeneratingQuestions ? (
+                                <>
+                                  <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> REGENERATING...
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw size={14} /> RE-GENERATE
+                                </>
+                              )}
+                            </button>
+                          </div>
 
-                                    <div style={{ borderLeft: '3px solid var(--accent-secondary)', paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                      <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-secondary)', fontWeight: 600 }}>STAR_PREPARATION_TIP</span>
-                                      <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
-                                        {q.tip}
-                                      </p>
+                          {isGeneratingQuestions ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6rem' }}>
+                              <RefreshCw size={32} style={{ animation: 'spin 2s linear infinite', color: 'var(--accent-primary)' }} />
+                              <p style={{ marginTop: '1rem', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>CREATING_INTERVIEW_MAP...</p>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                              {interviewQuestions && interviewQuestions.length > 0 ? (
+                                interviewQuestions.map((q, idx) => (
+                                  <SpotlightCard key={idx} style={{ padding: '2.5rem' }}>
+                                    <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                                      <div style={{ background: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent-primary)', width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, flexShrink: 0 }}>
+                                        {idx + 1}
+                                      </div>
+                                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                        <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: '1.4' }}>
+                                          {q.question}
+                                        </h4>
+                                        
+                                        <div style={{ borderLeft: '3px solid rgba(255,255,255,0.08)', paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                          <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)', fontWeight: 600 }}>RATIONALE</span>
+                                          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                                            {q.rationale}
+                                          </p>
+                                        </div>
+
+                                        <div style={{ borderLeft: '3px solid var(--accent-secondary)', paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                          <span style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-secondary)', fontWeight: 600 }}>STAR_PREPARATION_TIP</span>
+                                          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                                            {q.tip}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </SpotlightCard>
+                                ))
+                              ) : (
+                                <SpotlightCard style={{ padding: '3rem', textAlign: 'center' }}>
+                                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>No questions generated yet. Click Re-generate to create interview prep questions.</p>
+                                </SpotlightCard>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        /* INTERVIEW CHAT SIMULATOR PANEL */
+                        <SpotlightCard style={{ padding: '2.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', minHeight: '500px' }}>
+                          {currentChatIndex === 0 ? (
+                            /* START SCREEN */
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '4rem 2rem', gap: '1.5rem', flex: 1 }}>
+                              <Brain size={48} color="var(--accent-primary)" style={{ filter: 'drop-shadow(0 0 10px rgba(99,102,241,0.3))' }} />
+                              <div>
+                                <h4 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>Simulated AI Mock Interview</h4>
+                                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', maxWidth: '500px', margin: '0.5rem auto 0 auto', lineHeight: '1.6' }}>
+                                  Gemini will conduct a 3-question mock interview custom tailored to your target job profile. You will receive real-time recruiter scores and feedback after every response.
+                                </p>
+                              </div>
+                              <button 
+                                onClick={startMockInterview}
+                                disabled={isGeneratingQuestions}
+                                className="btn-primary-small"
+                                style={{ background: 'var(--accent-primary)', border: 'none', color: '#fff', padding: '0.9rem 2.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', fontFamily: 'var(--font-mono)' }}
+                              >
+                                {isGeneratingQuestions ? (
+                                  <>
+                                    <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> GENERATING_SIMULATION...
+                                  </>
+                                ) : (
+                                  <>
+                                    START_AI_INTERVIEW <ChevronRight size={14} />
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            /* CHAT INTERACTIVE VIEW */
+                            <div style={{ display: 'flex', flexDirection: 'column', height: '550px', justifyContent: 'space-between', gap: '1.5rem' }}>
+                              {/* Header Progress Info */}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--glass-border)', paddingBottom: '0.75rem', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
+                                <span style={{ color: 'var(--accent-primary)', fontWeight: 600 }}>SESSION_ACTIVE // GE_RECRUITER_AI</span>
+                                <span style={{ color: 'var(--text-secondary)' }}>
+                                  {currentChatIndex <= 3 ? `QUESTION_${currentChatIndex}_OF_3` : 'INTERVIEW_COMPLETE'}
+                                </span>
+                              </div>
+
+                              {/* Message Logs */}
+                              <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingRight: '0.5rem' }}>
+                                {chatMessages.map((msg, i) => (
+                                  <div key={i} style={{ display: 'flex', justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start' }}>
+                                    <div style={{
+                                      maxWidth: '85%',
+                                      padding: '1.25rem',
+                                      borderRadius: '12px',
+                                      background: msg.sender === 'user' ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                                      border: msg.sender === 'user' ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid var(--glass-border)',
+                                      color: 'var(--text-primary)',
+                                      fontSize: '0.85rem',
+                                      lineHeight: '1.6',
+                                      position: 'relative'
+                                    }}>
+                                      {/* Sender tag */}
+                                      <div style={{ fontSize: '0.6rem', fontFamily: 'var(--font-mono)', color: msg.sender === 'user' ? 'var(--accent-primary)' : 'var(--accent-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
+                                        {msg.sender === 'user' ? 'CANDIDATE' : 'INTERVIEWER_AI'}
+                                      </div>
+                                      
+                                      <div style={{ whiteSpace: 'pre-line' }}>
+                                        {msg.text}
+                                      </div>
+
+                                      {/* Individual score display */}
+                                      {msg.score !== undefined && (
+                                        <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.5rem', borderRadius: '6px' }}>
+                                          <div style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)', fontWeight: 600 }}>RESPONSE_RATING:</div>
+                                          <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: msg.score >= 7 ? 'var(--success)' : 'var(--accent-secondary)' }}>
+                                            {msg.score} / 10
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
+                                ))}
+                                {isSendingChatMessage && (
+                                  <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                                    <div style={{ padding: '1.25rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                      <RefreshCw size={14} style={{ animation: 'spin 1.5s linear infinite', color: 'var(--accent-primary)' }} />
+                                      <span style={{ fontSize: '0.75rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>EVALUATING_RESPONSE_AND_COMPILING...</span>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Input panel */}
+                              {currentChatIndex <= 3 ? (
+                                <div style={{ display: 'flex', gap: '0.75rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
+                                  <textarea
+                                    value={userChatInput}
+                                    onChange={(e) => setUserChatInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        handleSendResponse();
+                                      }
+                                    }}
+                                    placeholder="Type your situational answer using the STAR method (Situation, Task, Action, Result)..."
+                                    disabled={isSendingChatMessage}
+                                    style={{ flex: 1, padding: '0.75rem 1rem', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.2)', color: '#fff', fontSize: '0.85rem', resize: 'none', height: '60px' }}
+                                  />
+                                  <button
+                                    onClick={handleSendResponse}
+                                    disabled={isSendingChatMessage || !userChatInput.trim()}
+                                    className="btn-primary-small"
+                                    style={{ background: 'var(--accent-primary)', border: 'none', color: '#fff', padding: '0 1.5rem', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '8px', cursor: 'pointer' }}
+                                  >
+                                    SEND
+                                  </button>
                                 </div>
-                              </SpotlightCard>
-                            ))
-                          ) : (
-                            <SpotlightCard style={{ padding: '3rem', textAlign: 'center' }}>
-                              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>No questions generated yet. Click Re-generate to create interview prep questions.</p>
-                            </SpotlightCard>
+                              ) : (
+                                /* RESET INTERVIEW SCREEN */
+                                <div style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '1rem', display: 'flex', justifyContent: 'center' }}>
+                                  <button
+                                    onClick={() => {
+                                      setCurrentChatIndex(0);
+                                      setChatMessages([]);
+                                    }}
+                                    className="btn-secondary"
+                                    style={{ padding: '0.75rem 2rem', fontSize: '0.8rem', fontFamily: 'var(--font-mono)' }}
+                                  >
+                                    START_NEW_INTERVIEW
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           )}
-                        </div>
+                        </SpotlightCard>
                       )}
                     </motion.div>
                   )}
