@@ -323,13 +323,24 @@ const parseMarkdownToData = (md) => {
       return;
     }
     
-    if (trimmed.includes('@') || trimmed.includes('|') || trimmed.includes('linkedin.com')) {
-      const parts = trimmed.split('|').map(p => p.trim());
+    if (trimmed.includes('@') || trimmed.includes('linkedin.com') || (trimmed.toLowerCase().includes('phone') || trimmed.toLowerCase().includes('mobile') || trimmed.toLowerCase().includes('email'))) {
+      const delimiters = /[|•·,]| {2,}/;
+      const parts = trimmed.split(delimiters).map(p => p.trim()).filter(Boolean);
       parts.forEach(p => {
-        if (p.includes('@')) data.email = p;
-        else if (p.includes('linkedin.com')) data.linkedin = p;
-        else if (/[0-9]/.test(p) && p.length > 7) data.phone = p;
-        else if (p) data.location = p;
+        if (p.includes('@')) {
+          const emailMatch = p.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+          data.email = emailMatch ? emailMatch[0] : p;
+        } else if (p.toLowerCase().includes('linkedin.com')) {
+          const liMatch = p.match(/(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[a-zA-Z0-9_-]+/i);
+          data.linkedin = liMatch ? liMatch[0] : p;
+        } else if (/(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/.test(p) || p.toLowerCase().includes('mobile') || p.toLowerCase().includes('phone')) {
+          const phoneMatch = p.replace(/(?:mobile|phone|tel|contact|:|\+)/ig, '').trim();
+          data.phone = phoneMatch;
+        } else {
+          if (!data.location && p.length < 50 && !p.toLowerCase().includes('skills') && !p.toLowerCase().includes('projects')) {
+            data.location = p;
+          }
+        }
       });
       return;
     }
@@ -636,7 +647,30 @@ function App() {
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        fullText += content.items.map(item => item.str).join(' ') + '\n';
+        const items = content.items;
+        if (items.length === 0) continue;
+        
+        // Group items on roughly the same line (y-coordinate within ~5 units)
+        const lineGroups = {};
+        items.forEach(item => {
+          if (!item.str || !item.transform) return;
+          const y = Math.round(item.transform[5] / 5) * 5;
+          if (!lineGroups[y]) {
+            lineGroups[y] = [];
+          }
+          lineGroups[y].push(item);
+        });
+        
+        // Sort lines vertically (top to bottom)
+        const sortedY = Object.keys(lineGroups).map(Number).sort((a, b) => b - a);
+        
+        const pageText = sortedY.map(y => {
+          // Sort items horizontally (left to right)
+          const lineItems = lineGroups[y].sort((a, b) => a.transform[4] - b.transform[4]);
+          return lineItems.map(item => item.str).join(' ');
+        }).join('\n');
+        
+        fullText += pageText + '\n';
       }
       setResume(fullText);
       setUploadedFile(file);
