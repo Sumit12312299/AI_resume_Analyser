@@ -121,11 +121,65 @@ const SpotlightCard = ({ children, className = "", style = {} }) => {
   );
 };
 
+const AnimatedCounter = ({ value, duration = 1.2 }) => {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let start = 0;
+    const end = parseInt(value, 10);
+    if (isNaN(end)) return;
+    if (start === end) {
+      setCount(end);
+      return;
+    }
+    let totalMs = duration * 1000;
+    let increment = Math.ceil(end / 40); // 40 steps
+    let stepTime = Math.max(Math.floor(totalMs / 40), 16); // ~60fps target
+    let timer = setInterval(() => {
+      start += increment;
+      if (start >= end) {
+        setCount(end);
+        clearInterval(timer);
+      } else {
+        setCount(start);
+      }
+    }, stepTime);
+    return () => clearInterval(timer);
+  }, [value, duration]);
+  return <span>{count}</span>;
+};
+
+const AnimatedTextMessage = ({ text }) => {
+  const words = text.split(' ');
+  return (
+    <motion.span
+      initial="hidden"
+      animate="visible"
+      variants={{
+        visible: { transition: { staggerChildren: 0.02 } }
+      }}
+    >
+      {words.map((word, idx) => (
+        <motion.span
+          key={idx}
+          variants={{
+            hidden: { opacity: 0, y: 3 },
+            visible: { opacity: 1, y: 0 }
+          }}
+          style={{ display: 'inline-block', marginRight: '0.25rem' }}
+        >
+          {word}
+        </motion.span>
+      ))}
+    </motion.span>
+  );
+};
+
 const MeshBackground = () => (
   <div className="mesh-bg">
-    <div className="mesh-circle" style={{ width: '40vw', height: '40vw', background: '#6366f1', top: '-10%', left: '-10%' }} />
-    <div className="mesh-circle" style={{ width: '30vw', height: '30vw', background: '#0ea5e9', bottom: '10%', right: '-5%' }} />
-    <div className="mesh-circle" style={{ width: '25vw', height: '25vw', background: '#f43f5e', top: '40%', left: '30%', opacity: 0.1 }} />
+    <div className="mesh-circle" style={{ width: '45vw', height: '45vw', background: 'radial-gradient(circle, var(--accent-primary) 0%, transparent 70%)', top: '-15%', left: '-15%' }} />
+    <div className="mesh-circle" style={{ width: '35vw', height: '35vw', background: 'radial-gradient(circle, var(--accent-secondary) 0%, transparent 70%)', bottom: '5%', right: '-10%' }} />
+    <div className="mesh-circle" style={{ width: '30vw', height: '30vw', background: 'radial-gradient(circle, var(--accent-vibrant) 0%, transparent 70%)', top: '35%', left: '25%', opacity: 0.08 }} />
+    <div className="mesh-circle" style={{ width: '25vw', height: '25vw', background: 'radial-gradient(circle, #8b5cf6 0%, transparent 75%)', bottom: '40%', right: '20%', opacity: 0.05 }} />
   </div>
 );
 
@@ -149,12 +203,13 @@ const SettingsModal = ({ onClose, apiKey, setApiKey, selectedModel, setSelectedM
       exit={{ opacity: 0 }}
       className="modal-overlay" 
       onClick={onClose}
+      style={{ perspective: 1200 }}
     >
       <motion.div 
-        initial={{ opacity: 0, scale: 0.9, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        transition={{ type: 'spring', damping: 25, stiffness: 350 }}
+        initial={{ opacity: 0, scale: 0.88, rotateX: -15 }}
+        animate={{ opacity: 1, scale: 1, rotateX: 0 }}
+        exit={{ opacity: 0, scale: 0.88, rotateX: 15 }}
+        transition={{ type: 'spring', damping: 26, stiffness: 220 }}
         className="modal-card" 
         onClick={(e) => e.stopPropagation()}
       >
@@ -1433,21 +1488,33 @@ function App() {
                 {/* ADVANCED TAB BAR BUTTONS */}
                 <motion.div variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }}>
                   <div className="tab-bar">
-                    <button className={`tab-btn ${activeTab === 'analytics' ? 'active' : ''}`} onClick={() => setActiveTab('analytics')}>
-                      <Activity size={16} /> ANALYTICS_MATRIX
-                    </button>
-                    <button className={`tab-btn ${activeTab === 'audit' ? 'active' : ''}`} onClick={() => setActiveTab('audit')}>
-                      <CheckSquare size={16} /> ATS_AUDIT_COPILOT
-                    </button>
-                    <button className={`tab-btn ${activeTab === 'workspace' ? 'active' : ''}`} onClick={() => setActiveTab('workspace')}>
-                      <Edit size={16} /> WORKSPACE_EDITOR
-                    </button>
-                    <button className={`tab-btn ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => setActiveTab('templates')}>
-                      <Palette size={16} /> TEMPLATE_CUSTOMIZER
-                    </button>
-                    <button className={`tab-btn ${activeTab === 'interview' ? 'active' : ''}`} onClick={() => setActiveTab('interview')}>
-                      <Brain size={16} /> INTERVIEW_COPILOT
-                    </button>
+                    {[
+                      { id: 'analytics', label: 'ANALYTICS_MATRIX', icon: <Activity size={16} /> },
+                      { id: 'audit', label: 'ATS_AUDIT_COPILOT', icon: <CheckSquare size={16} /> },
+                      { id: 'workspace', label: 'WORKSPACE_EDITOR', icon: <Edit size={16} /> },
+                      { id: 'templates', label: 'TEMPLATE_CUSTOMIZER', icon: <Palette size={16} /> },
+                      { id: 'interview', label: 'INTERVIEW_COPILOT', icon: <Brain size={16} /> }
+                    ].map((tab) => {
+                      const isActive = activeTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          className={`tab-btn ${isActive ? 'active' : ''}`}
+                          onClick={() => setActiveTab(tab.id)}
+                        >
+                          {isActive && (
+                            <motion.div
+                              layoutId="activeTabPill"
+                              className="active-tab-bg"
+                              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                            />
+                          )}
+                          <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                            {tab.icon} {tab.label}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </motion.div>
 
@@ -1469,7 +1536,20 @@ function App() {
                           <div style={{ position: 'relative', width: '220px', height: '220px' }}>
                             <svg className="score-dial-glow" width="220" height="220" viewBox="0 0 100 100">
                                <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="4" />
-                               <motion.circle cx="50" cy="50" r="45" fill="none" stroke="url(#scoreGrad)" strokeWidth="6" strokeDasharray="283" strokeDashoffset={283 - (283 * results.score) / 100} strokeLinecap="round" transform="rotate(-90 50 50)" />
+                               <motion.circle 
+                                 cx="50" 
+                                 cy="50" 
+                                 r="45" 
+                                 fill="none" 
+                                 stroke="url(#scoreGrad)" 
+                                 strokeWidth="6" 
+                                 strokeDasharray="283" 
+                                 initial={{ strokeDashoffset: 283 }}
+                                 animate={{ strokeDashoffset: 283 - (283 * results.score) / 100 }}
+                                 transition={{ duration: 1.5, ease: "easeOut" }}
+                                 strokeLinecap="round" 
+                                 transform="rotate(-90 50 50)" 
+                               />
                                <defs>
                                 <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                                   <stop offset="0%" stopColor="#6366f1" />
@@ -1478,7 +1558,9 @@ function App() {
                                </defs>
                             </svg>
                             <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                              <span style={{ fontSize: '4rem', fontWeight: 800 }}>{results.score}</span>
+                              <span style={{ fontSize: '4rem', fontWeight: 800 }}>
+                                <AnimatedCounter value={results.score} />
+                              </span>
                               <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--text-secondary)' }}>ALIGNMENT_SCORE</div>
                             </div>
                           </div>
@@ -2343,40 +2425,43 @@ function App() {
 
                               {/* Message Logs */}
                               <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.25rem', paddingRight: '0.5rem' }}>
-                                {chatMessages.map((msg, i) => (
-                                  <div key={i} style={{ display: 'flex', justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start' }}>
-                                    <div style={{
-                                      maxWidth: '85%',
-                                      padding: '1.25rem',
-                                      borderRadius: '12px',
-                                      background: msg.sender === 'user' ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.03)',
-                                      border: msg.sender === 'user' ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid var(--glass-border)',
-                                      color: 'var(--text-primary)',
-                                      fontSize: '0.85rem',
-                                      lineHeight: '1.6',
-                                      position: 'relative'
-                                    }}>
-                                      {/* Sender tag */}
-                                      <div style={{ fontSize: '0.6rem', fontFamily: 'var(--font-mono)', color: msg.sender === 'user' ? 'var(--accent-primary)' : 'var(--accent-secondary)', marginBottom: '0.5rem', fontWeight: 600 }}>
-                                        {msg.sender === 'user' ? 'CANDIDATE' : 'INTERVIEWER_AI'}
-                                      </div>
-                                      
-                                      <div style={{ whiteSpace: 'pre-line' }}>
-                                        {msg.text}
-                                      </div>
-
-                                      {/* Individual score display */}
-                                      {msg.score !== undefined && (
-                                        <div style={{ marginTop: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(0,0,0,0.2)', padding: '0.5rem', borderRadius: '6px' }}>
-                                          <div style={{ fontSize: '0.7rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)', fontWeight: 600 }}>RESPONSE_RATING:</div>
-                                          <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: msg.score >= 7 ? 'var(--success)' : 'var(--accent-secondary)' }}>
-                                            {msg.score} / 10
-                                          </div>
+                                {chatMessages.map((msg, i) => {
+                                  const isLatestAi = msg.sender !== 'user' && i === chatMessages.length - 1;
+                                  return (
+                                    <motion.div 
+                                      key={i} 
+                                      initial={{ opacity: 0, y: 15, scale: 0.98 }}
+                                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                                      transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+                                      style={{ display: 'flex', justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start' }}
+                                    >
+                                      <div className={msg.sender === 'user' ? 'chat-bubble-user' : 'chat-bubble-ai'}>
+                                        {/* Sender tag */}
+                                        <div style={{ fontSize: '0.6rem', fontFamily: 'var(--font-mono)', color: msg.sender === 'user' ? 'var(--accent-primary)' : 'var(--accent-secondary)', marginBottom: '0.5rem', fontWeight: 700, letterSpacing: '0.05em' }}>
+                                          {msg.sender === 'user' ? 'CANDIDATE' : 'INTERVIEWER_AI'}
                                         </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ))}
+                                        
+                                        <div style={{ whiteSpace: 'pre-line' }}>
+                                          {isLatestAi ? <AnimatedTextMessage text={msg.text} /> : msg.text}
+                                        </div>
+
+                                        {/* Individual score display */}
+                                        {msg.score !== undefined && (
+                                          <motion.div 
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            style={{ marginTop: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.6rem', background: 'rgba(0,0,0,0.25)', padding: '0.5rem 0.85rem', borderRadius: '8px', border: '1px solid var(--glass-border)' }}
+                                          >
+                                            <div style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--accent-primary)', fontWeight: 600 }}>RESPONSE_RATING:</div>
+                                            <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: msg.score >= 7 ? 'var(--success)' : 'var(--accent-secondary)' }}>
+                                              {msg.score} / 10
+                                            </div>
+                                          </motion.div>
+                                        )}
+                                      </div>
+                                    </motion.div>
+                                  );
+                                })}
                                 {isSendingChatMessage && (
                                   <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
                                     <div style={{ padding: '1.25rem', borderRadius: '12px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
